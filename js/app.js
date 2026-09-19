@@ -44,19 +44,31 @@
     advancedMax: 1024,
     advancedRatio: 0.3,
     typeWeights: {},
-    status: 1,
+    status: 0,
     adminPassword: 'cjdxjsjkxxy'
   };
 
   // ========== 初始化 ==========
   function init() {
-    // 加载配置
+    // 先加载本地配置
     var config = Storage.get('exam_config', null);
     if (!config) {
       config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
       Storage.set('exam_config', config);
     }
     state.examConfig = config;
+
+    // 从云端拉取最新配置
+    if (Cloud.isConfigured()) {
+      Cloud.fetchExamConfig().then(function(res) {
+        if (res && res.length > 0 && res[0].data) {
+          var cloudConfig = JSON.parse(res[0].data);
+          state.examConfig = cloudConfig;
+          Storage.set('exam_config', cloudConfig);
+          renderPage(currentPage);
+        }
+      }).catch(function() {});
+    }
 
     // 加载用户信息
     state.userInfo = Storage.get('userInfo', null);
@@ -212,6 +224,12 @@
         break;
       case 'admin-password':
         state._adminPwdInput = value;
+        break;
+      case 'config-start-time':
+        state.examConfig.startTime = value ? new Date(value).getTime() : null;
+        break;
+      case 'config-end-time':
+        state.examConfig.endTime = value ? new Date(value).getTime() : null;
         break;
       case 'config-exam-name':
         state.examConfig.examName = value;
@@ -993,6 +1011,10 @@
       if (!confirmed) return;
       state.examConfig.status = newStatus;
       Storage.set('exam_config', state.examConfig);
+    // 上传到云端
+    if (Cloud.isConfigured()) {
+      Cloud.saveExamConfig(state.examConfig).catch(function() {});
+    }
       Util.showToast('已' + actionText + '考试', 'success');
       renderAdmin();
     });
@@ -1016,7 +1038,31 @@
         '</div>';
     });
 
+    var statusText = config.status === 1 ? '进行中' : (config.status === 2 ? '已结束' : '未开启');
+    var statusColor = config.status === 1 ? '#22c55e' : (config.status === 2 ? '#64748b' : '#ef4444');
+    // 格式化时间
+    function fmtTs(ts) {
+      if (!ts) return '';
+      var d = new Date(ts);
+      var pad = function(n) { return n < 10 ? '0' + n : n; };
+      return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
     document.getElementById('admin-config-content').innerHTML =
+      '<div class="card"><div class="card-title">考试状态</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">' +
+          '<div style="width:10px;height:10px;border-radius:50%;background:' + statusColor + ';"></div>' +
+          '<div style="font-size:18px;font-weight:600;color:' + statusColor + ';">当前状态：' + statusText + '</div>' +
+        '</div>' +
+        '<button class="btn btn-primary" style="width:100%;" data-action="toggle-exam-status">' + (config.status === 1 ? '关闭考试' : '开启考试') + '</button>' +
+      '</div>' +
+
+      '<div class="card"><div class="card-title">定时设置</div>' +
+        '<div class="form-group"><label class="form-label">开始时间</label><input class="form-input" type="datetime-local" data-input="config-start-time" value="' + fmtTs(config.startTime) + '"></div>' +
+        '<div class="form-group"><label class="form-label">结束时间</label><input class="form-input" type="datetime-local" data-input="config-end-time" value="' + fmtTs(config.endTime) + '"></div>' +
+        '<div class="card-desc" style="margin-top:8px;">设置后，在时间段内学生可以进入考试，超时自动结束。留空则手动控制开关。</div>' +
+      '</div>' +
+
       '<div class="card"><div class="card-title">基础配置</div>' +
         '<div class="form-group"><label class="form-label">考试名称</label><input class="form-input" type="text" data-input="config-exam-name" value="' + config.examName + '"></div>' +
         '<div class="form-row">' +

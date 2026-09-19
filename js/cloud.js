@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Supabase 云端同步模块
  * 纯REST API实现，无需SDK
  */
@@ -18,7 +18,7 @@ window.Cloud = (function() {
   loadConfig();
 
   function setConfig(cfg) {
-    config.url = (cfg.url || '').replace(/\/$/, ''); // 去掉末尾斜杠
+    config.url = (cfg.url || '').replace(/\/$/, '');
     config.anonKey = cfg.anonKey || '';
     localStorage.setItem('base_exam_cloud_config', JSON.stringify(config));
   }
@@ -65,25 +65,33 @@ window.Cloud = (function() {
     });
   }
 
+  // ========== 考试配置 ==========
+  // 保存考试配置到云端（id=1，全局唯一）
+  function saveExamConfig(cfg) {
+    var row = { id: 1, data: JSON.stringify(cfg), updated_at: new Date().toISOString() };
+    return request('POST', '/exam_config?on_conflict=id', [row]);
+  }
+
+  // 从云端拉取考试配置
+  function fetchExamConfig() {
+    return request('GET', '/exam_config?id=eq.1&select=*');
+  }
+
   // ========== 考试记录 ==========
-  // 上传考试记录
   function uploadRecord(record) {
     return request('POST', '/exam_records', [record]);
   }
 
-  // 查询所有考试记录（按提交时间降序）
   function fetchAllRecords(limit) {
     limit = limit || 500;
-    return request('GET', '/exam_records?select=*&order=submitTime.desc&limit=' + limit);
+    return request('GET', '/exam_records?select=*&order=submit_time.desc&limit=' + limit);
   }
 
-  // 按学号查询某学生的所有记录
   function fetchRecordsByStudent(studentId) {
-    return request('GET', '/exam_records?select=*&studentId=eq.' + encodeURIComponent(studentId) + '&order=submitTime.desc');
+    return request('GET', '/exam_records?select=*&student_id=eq.' + encodeURIComponent(studentId) + '&order=submit_time.desc');
   }
 
   // ========== 学生名单 ==========
-  // 上传学生名单（批量）
   function uploadStudentList(students) {
     var rows = students.map(function(s) {
       return { student_id: s.studentId, name: s.name };
@@ -91,29 +99,24 @@ window.Cloud = (function() {
     return request('POST', '/students', rows);
   }
 
-  // 拉取学生名单
   function fetchStudentList() {
     return request('GET', '/students?select=*&order=student_id');
   }
 
-  // 清空学生名单
   function clearStudentList() {
     return request('DELETE', '/students?id=gt.0');
   }
 
   // ========== 设备绑定 ==========
-  // 检查设备是否已绑定其他学号
   function checkDeviceBinding(fingerprint) {
     return request('GET', '/device_bindings?select=*&fingerprint=eq.' + encodeURIComponent(fingerprint));
   }
 
-  // 上传设备绑定
   function uploadDeviceBinding(binding) {
     return request('POST', '/device_bindings', [binding]);
   }
 
   // ========== 工具 ==========
-  // 测试连接
   function testConnection() {
     return request('GET', '/exam_records?select=id&limit=1');
   }
@@ -122,6 +125,8 @@ window.Cloud = (function() {
     setConfig: setConfig,
     getConfig: getConfig,
     isConfigured: isConfigured,
+    saveExamConfig: saveExamConfig,
+    fetchExamConfig: fetchExamConfig,
     uploadRecord: uploadRecord,
     fetchAllRecords: fetchAllRecords,
     fetchRecordsByStudent: fetchRecordsByStudent,
