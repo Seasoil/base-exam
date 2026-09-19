@@ -188,6 +188,7 @@
       
       case 'next-question': nextQuestion(); break;
       case 'submit-current': submitCurrent(); break;
+      case 'exit-exam': exitExam(); break;
       case 'toggle-mark': toggleMark(); break;
       case 'toggle-sheet': toggleAnswerSheet(); break;
       case 'jump-question': jumpQuestion(parseInt(params.index)); break;
@@ -586,7 +587,7 @@
 
     document.getElementById('exam-content').innerHTML =
       '<div class="exam-topbar">' +
-        '<div class="exam-topbar-left">第 ' + (state.currentIndex + 1) + ' / ' + paper.questions.length + ' 题</div>' +
+        '<div class="exam-topbar-left" data-action="exit-exam" style="cursor:pointer;color:#ef4444;">← 退出</div>' +
         '<div class="exam-topbar-center ' + (remaining <= 60 ? 'time-warning' : '') + '">⏱ ' + Util.formatDuration(remaining) + '</div>' +
         '<div class="exam-topbar-right">累计 <span style="color:#22c55e;font-weight:600;">' + totalScore.toFixed(1) + '</span> 分</div>' +
       '</div>' +
@@ -684,6 +685,28 @@
       saveExamProgress();
       renderExam();
     }
+  }
+
+  // 退出考试弹窗
+  function exitExam() {
+    var mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML =
+      '<div class="modal-box">' +
+        '<div class="modal-title">退出考试</div>' +
+        '<div class="modal-text">你确定要退出考试吗？</div>' +
+        '<div class="modal-text" style="font-size:13px;color:var(--gray-500);margin-top:8px;">退出后进度会自动保存，下次考试期间可以继续。</div>' +
+        '<div class="modal-buttons">' +
+          '<button class="modal-btn modal-cancel" onclick="this.closest(\'.modal-mask\').remove()">继续考试</button>' +
+          '<button class="modal-btn modal-danger" id="exit-confirm-btn">直接交卷</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(mask);
+    mask.querySelector('#exit-confirm-btn').onclick = function() {
+      mask.remove();
+      doSubmit();
+    };
+    mask.onclick = function(e) { if (e.target === mask) mask.remove(); };
   }
 
   // 提交当前题，即时判题
@@ -880,7 +903,8 @@
         is_timeout: isTimeout,
         blur_count: blurCount,
         device_fingerprint: state.deviceInfo.fingerprint,
-        device_model: state.deviceInfo.deviceModel
+        device_model: state.deviceInfo.deviceModel,
+        is_final: true
       }).then(function() {
         console.log('成绩已同步到云端');
       }).catch(function(err) {
