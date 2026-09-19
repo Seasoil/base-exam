@@ -4,6 +4,10 @@
  */
 (function() {
   'use strict';
+  // 硬编码云端配置
+  if (window.Cloud) {
+    Cloud.setConfig({ url: 'https://uazwtblpwayqlpczczai.supabase.co', anonKey: 'sb_publishable_nx-6oXW-Dn6WcfQ-41-tWA_Utj6hMCs' });
+  }
 
   // ========== 全局状态 ==========
   var state = {
