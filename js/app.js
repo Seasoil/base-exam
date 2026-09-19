@@ -1282,8 +1282,8 @@
         '<div class="detail-record">' +
           '<div class="dr-score ' + scoreClass + '">' + r.score + '</div>' +
           '<div class="dr-content">' +
-            '<div>正确 ' + r.correctCount + '/' + r.totalCount + ' · 用时 ' + Util.formatDuration(r.duration) + '</div>' +
-            '<div class="dr-time">' + Util.formatTime(r.submitTime) + '</div>' +
+            '<div>正确 ' + (r.correct_count || r.correctCount) + '/' + (r.total_count || r.totalCount) + ' · 用时 ' + Util.formatDuration(r.duration) + '</div>' +
+            '<div class="dr-time">' + Util.formatTime(r.submit_time || r.submitTime) + '</div>' +
           '</div>' +
         '</div>';
     });
