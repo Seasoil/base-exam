@@ -69,7 +69,24 @@ window.Cloud = (function() {
   // 保存考试配置到云端（id=1，全局唯一）
   function saveExamConfig(cfg) {
     var row = { id: 1, data: JSON.stringify(cfg), updated_at: new Date().toISOString() };
-    return request('POST', '/exam_config?on_conflict=id', [row]);
+    return new Promise(function(resolve, reject) {
+      if (!isConfigured()) { reject(new Error('云端未配置')); return; }
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', config.url + '/rest/v1/exam_config');
+      xhr.setRequestHeader('apikey', config.anonKey);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + config.anonKey);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Prefer', 'resolution=merge-duplicates,return=representation');
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 100)));
+        }
+      };
+      xhr.onerror = function() { reject(new Error('网络请求失败')); };
+      xhr.send(JSON.stringify(row));
+    });
   }
 
   // 从云端拉取考试配置
