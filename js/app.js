@@ -172,6 +172,7 @@
       case 'clear-student-list': clearStudentList(); break;
       case 'download-template': downloadTemplate(); break;
       case 'show-qrcode': showQRCode(); break;
+      case 'add-student': addStudent(); break;
       case 'refresh-cloud-data': loadMonitorData(); Util.showToast('已刷新'); break;
       case 'save-cloud-config': saveCloudConfig(); break;
     }
@@ -189,11 +190,18 @@
           });
           if (matched) {
             state.userInfo.name = matched.name;
+            state.userInfo.clazz = matched.clazz || '';
             // 更新姓名输入框
             var nameInput = document.querySelector('[data-input="student-name"]');
             if (nameInput) nameInput.value = matched.name;
+            // 更新班级下拉
+            var classInput = document.querySelector('[data-input="student-class"]');
+            if (classInput) classInput.value = matched.clazz || '';
           }
         }
+        break;
+      case 'student-class':
+        state.userInfo.clazz = value;
         break;
       case 'student-name':
         if (!state.userInfo) state.userInfo = { studentId: '', name: '' };
@@ -252,11 +260,20 @@
     var statusClass = ['status-pending', 'status-open', 'status-closed'][status];
 
     var userInfoHtml = '';
+    // 获取班级列表
+    var classSet = {};
+    state.studentList.forEach(function(s) { if (s.clazz) classSet[s.clazz] = true; });
+    var classOptions = Object.keys(classSet);
+    var classOptsHtml = '<option value="">请选择班级</option>' + classOptions.map(function(c) {
+      return '<option value="' + c + '">' + c + '</option>';
+    }).join('');
+
     if (state.userInfo && state.userInfo.studentId) {
       userInfoHtml =
         '<div class="userinfo-display">' +
           '<div class="userinfo-row"><span class="userinfo-label">学号</span><span class="userinfo-value">' + state.userInfo.studentId + '</span></div>' +
           '<div class="userinfo-row"><span class="userinfo-label">姓名</span><span class="userinfo-value">' + state.userInfo.name + '</span></div>' +
+          (state.userInfo.clazz ? '<div class="userinfo-row"><span class="userinfo-label">班级</span><span class="userinfo-value">' + state.userInfo.clazz + '</span></div>' : '') +
           '<div class="userinfo-edit" data-action="edit-userinfo">修改信息</div>' +
         '</div>';
     } else {
@@ -268,7 +285,12 @@
         '<div class="form-group">' +
           '<label class="form-label">姓名</label>' +
           '<input class="form-input" type="text" data-input="student-name" placeholder="请输入姓名" maxlength="20" value="' + (state.userInfo ? state.userInfo.name || '' : '') + '">' +
-        '</div>';
+        '</div>' +
+        (classOptions.length > 0 ?
+          '<div class="form-group">' +
+            '<label class="form-label">班级</label>' +
+            '<select class="form-input" data-input="student-class">' + classOptsHtml + '</select>' +
+          '</div>' : '');
     }
 
     var startBtnText = status === 0 ? '考试未开始' : status === 2 ? '考试已结束' : '开始考试';
@@ -741,8 +763,9 @@
     // 云端同步：上传考试记录
     if (Cloud.isConfigured()) {
       Cloud.uploadRecord({
-        studentId: state.userInfo.studentId,
+        student_id: state.userInfo.studentId,
         name: state.userInfo.name,
+        clazz: state.userInfo.clazz || '',
         score: score,
         correctCount: correctCount,
         totalCount: questions.length,
@@ -1148,7 +1171,7 @@
         scoresHtml +=
           '<div class="score-row" data-action="view-student-detail" data-studentid="' + s.studentId + '">' +
             '<div class="score-rank ' + rankClass + '">' + (idx + 1) + '</div>' +
-            '<div class="score-student"><div class="ss-name">' + s.name + '</div><div class="ss-id">' + s.studentId + '</div></div>' +
+            '<div class="score-student"><div class="ss-name">' + s.name + '</div><div class="ss-id">' + s.studentId + (s.clazz ? ' · ' + s.clazz : '') + '</div></div>' +
             '<div class="score-info-text"><div class="si-score">' + s.maxScore + '<span class="si-unit">分</span></div><div class="si-meta">最新：' + s.latestScore + '分 · ' + s.examCount + '次' + ((s.maxBlurCount || 0) > 0 ? ' · <span style="color:#EF4444;">切屏' + s.maxBlurCount + '次</span>' : '') + '</div></div>' +
             '<div class="score-arrow">›</div>' +
           '</div>';
@@ -1381,7 +1404,7 @@
   }
 
   function downloadTemplate() {
-    var csv = '\uFEFF' + '学号,姓名\n2024001,张三\n2024002,李四\n2024003,王五';
+    var csv = '\uFEFF' + '学号,姓名,班级\n2024001,张三,计科2401\n2024002,李四,计科2401\n2024003,王五,软工2401';
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -1415,8 +1438,9 @@
         if (parts.length >= 2) {
           var sid = parts[0].trim();
           var name = parts[1].trim();
+          var clazz = parts[2] ? parts[2].trim() : '';
           if (sid && name) {
-            students.push({ studentId: sid, name: name });
+            students.push({ studentId: sid, name: name, clazz: clazz });
           } else {
             skipped++;
           }
@@ -1443,6 +1467,26 @@
     reader.readAsText(file, 'UTF-8');
     input.value = '';
   };
+
+  function addStudent() {
+    var sid = document.getElementById('add-sid').value.trim();
+    var name = document.getElementById('add-sname').value.trim();
+    var clazz = document.getElementById('add-sclass').value.trim();
+    if (!sid || !name) {
+      Util.showToast('请填写学号和姓名');
+      return;
+    }
+    // 检查是否已存在
+    var exists = state.studentList.find(function(s) { return s.studentId === sid; });
+    if (exists) {
+      Util.showToast('该学号已存在');
+      return;
+    }
+    state.studentList.push({ studentId: sid, name: name, clazz: clazz });
+    Storage.set('student_list', state.studentList);
+    Util.showToast('添加成功', 'success');
+    renderAdminStudents();
+  }
 
   function clearStudentList() {
     Util.showModal('清空名单',
