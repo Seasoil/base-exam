@@ -1,12 +1,12 @@
-/**
+﻿/**
  * Supabase 云端同步模块
  * 纯REST API实现，无需SDK
  */
 window.Cloud = (function() {
 
   var config = {
-    url: '',       // https://xxx.supabase.co
-    anonKey: ''    // anon public key
+    url: 'https://uazwtblpwayqlpczczai.supabase.co',
+    anonKey: 'sb_publishable_nx-6oXW-Dn6WcfQ-41-tWA_Utj6hMCs'
   };
 
   // 从本地存储加载配置
