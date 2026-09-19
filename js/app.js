@@ -188,6 +188,16 @@
       
       case 'next-question': nextQuestion(); break;
       case 'submit-current': submitCurrent(); break;
+      case 'toggle-wrong-only': state.resultOnlyWrong = !state.resultOnlyWrong; state.resultIndex = 0; renderResult(); break;
+      case 'jump-question':
+        var val = parseInt(document.getElementById('jump-input').value);
+        if (val >= 1 && val <= (state.resultOnlyWrong ? state.examResult.questions.filter(function(q){return !q.correct;}).length : state.examResult.questions.length)) {
+          state.resultIndex = val - 1;
+          renderResult();
+        } else {
+          Util.showToast('题号超出范围');
+        }
+        break;
       case 'exit-exam': exitExam(); break;
       case 'toggle-mark': toggleMark(); break;
       case 'toggle-sheet': toggleAnswerSheet(); break;
@@ -940,23 +950,48 @@
 
     var accuracy = r.totalCount > 0 ? Math.round((r.correctCount / r.totalCount) * 1000) / 10 : 0;
 
-    // 错题列表
-    var wrongHtml = '';
-    if (r.wrongQuestions.length === 0) {
-      wrongHtml = '<div class="empty"><div class="empty-icon">🎉</div><div>全部答对，太棒了！</div></div>';
-    } else {
-      r.wrongQuestions.forEach(function(wq, idx) {
-        wrongHtml +=
-          '<div class="wrong-card">' +
-            '<div class="wrong-header"><span class="tag tag-red">错题 ' + (idx + 1) + '</span><span class="tag tag-blue">' + wq.typeName + '</span></div>' +
-            '<div class="wrong-question">' + wq.question + '</div>' +
-            '<div class="wrong-answer-row">' +
-              '<div class="wrong-answer-item wrong"><div class="wa-label">你的答案</div><div class="wa-value">' + (wq.userAnswer || '(未作答)') + '</div></div>' +
-              '<div class="wrong-answer-item correct"><div class="wa-label">正确答案</div><div class="wa-value">' + wq.answer + '</div></div>' +
-            '</div>' +
-            '<div class="wrong-explanation"><div class="we-title">📖 解析</div><div class="we-content">' + wq.explanation.replace(/\n/g, '<br>') + '</div></div>' +
-          '</div>';
-      });
+    // 当前题号（默认0）
+    if (typeof state.resultIndex !== 'number') state.resultIndex = 0;
+    if (typeof state.resultOnlyWrong !== 'boolean') state.resultOnlyWrong = false;
+
+    // 获取题目列表（全部或仅错题）
+    var questions = r.questions || [];
+    var wrongIdxList = [];
+    questions.forEach(function(q, i) {
+      if (q.correct === false) wrongIdxList.push(i);
+    });
+
+    var displayList = state.resultOnlyWrong ? wrongIdxList.map(function(i){return {q: questions[i], idx: i};}) : questions.map(function(q,i){return {q:q, idx:i};});
+    var cur = displayList[state.resultIndex];
+    if (!cur) { state.resultIndex = 0; cur = displayList[0]; }
+
+    // 题号导航HTML
+    var navHtml = '';
+    displayList.forEach(function(item, i) {
+      var cls = 'nav-item';
+      if (item.q.correct) cls += ' nav-correct';
+      else cls += ' nav-wrong';
+      if (i === state.resultIndex) cls += ' nav-current';
+      var num = state.resultOnlyWrong ? (i+1) : (item.idx+1);
+      navHtml += '<div class="' + cls + '" data-action="result-nav" data-index="' + i + '">' + num + '</div>';
+    });
+
+    // 当前题解析
+    var curHtml = '';
+    if (cur) {
+      var q = cur.q;
+      var correctClass = q.correct ? 'correct' : 'wrong';
+      var correctIcon = q.correct ? '✅ 回答正确' : '❌ 回答错误';
+      curHtml =
+        '<div class="analysis-box ' + correctClass + '">' +
+          '<div class="analysis-title">' + correctIcon + ' · 第 ' + (cur.idx+1) + ' 题</div>' +
+          '<div class="analysis-item">题型：' + q.typeName + '</div>' +
+          '<div class="analysis-item">题目：' + q.question + '</div>' +
+          '<div class="analysis-item">原数：' + q.sourceValue + '（' + q.fromBase + '进制）</div>' +
+          '<div class="analysis-item">你的答案：<span class="your-answer">' + (q.userAnswer || '空') + '</span></div>' +
+          '<div class="analysis-item">正确答案：<span class="right-answer">' + q.answer + '</span></div>' +
+          '<div class="analysis-explain"><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;margin:0;">' + Converter.generateExplanation(q, q.userAnswer) + '</pre></div>' +
+        '</div>';
     }
 
     document.getElementById('result-content').innerHTML =
@@ -976,14 +1011,32 @@
         '<button class="btn btn-primary" data-action="retake-exam">再考一次</button>' +
         '<div class="btn-row mt-16">' +
           '<button class="btn btn-secondary flex-1" data-action="view-history">历史记录</button>' +
-          '<button class="btn btn-secondary flex-1" onclick="navigator.clipboard.writeText(window.location.href).then(function(){Util.showToast(\'链接已复制\',\'success\')})">分享链接</button>' +
+          '<button class="btn btn-secondary flex-1" data-action="go-home">返回首页</button>' +
         '</div>' +
       '</div>' +
 
-      '<div class="section-title">错题解析（' + r.wrongQuestions.length + '）</div>' +
-      wrongHtml +
+      '<div class="card" style="margin-top:16px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<div style="font-weight:600;">题目解析</div>' +
+          '<button class="btn btn-secondary" data-action="toggle-wrong-only" style="padding:6px 12px;font-size:13px;">' + (state.resultOnlyWrong ? '显示全部题' : '只看错题') + '</button>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">' +
+          '<span>跳转到：</span>' +
+          '<input type="number" id="jump-input" min="1" max="' + (state.resultOnlyWrong ? wrongIdxList.length : questions.length) + '" style="width:70px;padding:6px;border:1px solid #e5e7eb;border-radius:6px;text-align:center;">' +
+          '<button class="btn btn-secondary" data-action="jump-question" style="padding:6px 12px;font-size:13px;">跳转</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-bottom:16px;">' + navHtml + '</div>' +
+        curHtml +
+      '</div>';
 
-      '<div class="bottom-actions"><button class="btn btn-primary" data-action="go-home">返回首页</button></div>';
+    // 暴露导航事件
+    var navBtns = document.querySelectorAll('[data-action="result-nav"]');
+    navBtns.forEach(function(btn) {
+      btn.onclick = function() {
+        state.resultIndex = parseInt(btn.dataset.index);
+        renderResult();
+      };
+    });
   }
 
   // ========== 历史记录页 ==========
