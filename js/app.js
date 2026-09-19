@@ -580,7 +580,7 @@
           '<div class="analysis-item">你的答案：<span class="your-answer">' + (sa.userAnswer || '空') + '</span></div>' +
           '<div class="analysis-item">正确答案：<span class="right-answer">' + q.answer + '</span></div>' +
           '<div class="analysis-item">本题得分：' + (sa.correct ? (100 / paper.questions.length).toFixed(1) : 0) + ' 分</div>' +
-          '<div class="analysis-explain">解析：' + q.question + '，从 ' + q.fromBase + ' 进制转换为 ' + q.toBase + ' 进制，结果为 ' + q.answer + '</div>' +
+          '<div class="analysis-explain"><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;margin:0;">' + Converter.generateExplanation(q, sa.userAnswer) + '</pre></div>' +
         '</div>';
     }
 
