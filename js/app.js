@@ -68,6 +68,17 @@
           renderPage(currentPage);
         }
       }).catch(function() {});
+
+      // 从云端拉取学生名单
+      Cloud.fetchStudentList().then(function(students) {
+        if (students && students.length > 0) {
+          state.studentList = students.map(function(s) {
+            return { studentId: s.student_id, name: s.name, clazz: s.clazz || '' };
+          });
+          Storage.set('student_list', state.studentList);
+          renderPage(currentPage);
+        }
+      }).catch(function() {});
     }
 
     // 加载用户信息
@@ -1524,6 +1535,12 @@
         '确认导入').then(function(confirmed) {
         if (!confirmed) return;
         state.studentList = students;
+    // 同步到云端
+    if (Cloud.isConfigured()) {
+      Cloud.clearStudentList().then(function() {
+        Cloud.uploadStudentList(students).catch(function() {});
+      }).catch(function() {});
+    }
         Storage.set('student_list', students);
         Util.showToast('成功导入 ' + students.length + ' 名学生', 'success');
         renderAdminStudents();
@@ -1548,6 +1565,10 @@
       return;
     }
     state.studentList.push({ studentId: sid, name: name, clazz: clazz });
+    // 同步到云端
+    if (Cloud.isConfigured()) {
+      Cloud.uploadStudentList([{ studentId: sid, name: name, clazz: clazz }]).catch(function() {});
+    }
     Storage.set('student_list', state.studentList);
     Util.showToast('添加成功', 'success');
     renderAdminStudents();
@@ -1559,6 +1580,10 @@
       '确认清空').then(function(confirmed) {
       if (!confirmed) return;
       state.studentList = [];
+    // 同步清空云端
+    if (Cloud.isConfigured()) {
+      Cloud.clearStudentList().catch(function() {});
+    }
       Storage.set('student_list', []);
       Util.showToast('已清空', 'success');
       renderAdminStudents();
