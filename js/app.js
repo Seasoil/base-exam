@@ -518,8 +518,6 @@
     if (progress) {
       var remainTime = Math.max(0, Math.floor((progress.endTime - Date.now()) / 1000));
       if (remainTime > 0) {
-      var remainTime = Math.max(0, Math.floor((progress.endTime - Date.now()) / 1000));
-      if (remainTime > 0) {
         // 时间还有剩余，问是否继续
         Util.showModal('继续考试',
           '检测到你有未完成的考试进度：\n' +
