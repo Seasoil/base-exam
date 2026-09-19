@@ -1139,16 +1139,23 @@
     var config = state.examConfig;
     var questionTypes = Converter.QUESTION_TYPES.map(function(t) {
       var weight = config.typeWeights && config.typeWeights[t.id] != null ? config.typeWeights[t.id] : (1 / Converter.QUESTION_TYPES.length);
-      return { id: t.id, name: t.name, weight: weight };
+      var locked = config.typeWeightsLocked && config.typeWeightsLocked[t.id] ? true : false;
+      return { id: t.id, name: t.name, weight: weight, locked: locked };
     });
 
     var typeHtml = '';
     questionTypes.forEach(function(t) {
       typeHtml +=
         '<div class="type-config-item">' +
-          '<div class="type-config-name">' + t.name + '</div>' +
-          '<div class="type-config-weight">' + Math.round(t.weight * 100) + '%</div>' +
-          '<input type="range" class="type-config-slider" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)">' +
+          '<label style="display:flex;align-items:center;gap:8px;flex:1;">' +
+            '<input type="checkbox" data-type-lock="' + t.id + '" ' + (t.locked ? 'checked' : '') + ' onchange="window.App.lockTypeWeight(this)" style="width:18px;height:18px;cursor:pointer;">' +
+            '<span class="type-config-name">' + t.name + '</span>' +
+          '</label>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<input type="number" class="type-config-num" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" style="width:60px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;text-align:center;">' +
+            '<span style="width:30px;">%</span>' +
+          '</div>' +
+          '<input type="range" class="type-config-slider" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" style="flex:1;">' +
         '</div>';
     });
 
