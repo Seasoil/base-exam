@@ -41,7 +41,7 @@
     advancedRatio: 0.3,
     typeWeights: {},
     status: 1,
-    adminPassword: 'admin123'
+    adminPassword: 'cjdxjsjkxxy'
   };
 
   // ========== 初始化 ==========
