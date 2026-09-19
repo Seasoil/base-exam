@@ -578,9 +578,9 @@
         '<div class="analysis-box ' + correctClass + '">' +
           '<div class="analysis-title">' + correctIcon + '</div>' +
           '<div class="analysis-item">你的答案：<span class="your-answer">' + (sa.userAnswer || '空') + '</span></div>' +
-          '<div class="analysis-item">正确答案：<span class="right-answer">' + q.correctAnswer + '</span></div>' +
+          '<div class="analysis-item">正确答案：<span class="right-answer">' + q.answer + '</span></div>' +
           '<div class="analysis-item">本题得分：' + (sa.correct ? (100 / paper.questions.length).toFixed(1) : 0) + ' 分</div>' +
-          '<div class="analysis-explain">解析：' + q.question + '，从 ' + q.fromBase + ' 进制转换为 ' + q.toBase + ' 进制，结果为 ' + q.correctAnswer + '</div>' +
+          '<div class="analysis-explain">解析：' + q.question + '，从 ' + q.fromBase + ' 进制转换为 ' + q.toBase + ' 进制，结果为 ' + q.answer + '</div>' +
         '</div>';
     }
 
@@ -691,7 +691,7 @@
     var paper = state.currentPaper;
     var q = paper.questions[state.currentIndex];
     var userAnswer = (state.answers[state.currentIndex] || '').trim().toUpperCase();
-    var correctAnswer = q.correctAnswer.toUpperCase();
+    var correctAnswer = q.answer.toUpperCase();
     var correct = userAnswer === correctAnswer;
 
     // 初始化数组
