@@ -767,14 +767,14 @@
         name: state.userInfo.name,
         clazz: state.userInfo.clazz || '',
         score: score,
-        correctCount: correctCount,
-        totalCount: questions.length,
+        correct_count: correctCount,
+        total_count: questions.length,
         duration: duration,
-        submitTime: now,
-        isTimeout: isTimeout,
-        blurCount: blurCount,
-        deviceFingerprint: state.deviceInfo.fingerprint,
-        deviceModel: state.deviceInfo.deviceModel
+        submit_time: now,
+        is_timeout: isTimeout,
+        blur_count: blurCount,
+        device_fingerprint: state.deviceInfo.fingerprint,
+        device_model: state.deviceInfo.deviceModel
       }).then(function() {
         console.log('成绩已同步到云端');
       }).catch(function(err) {
@@ -1122,15 +1122,15 @@
         var records = res.results || [];
         var scoresMap = {};
         records.forEach(function(r) {
-          var sid = r.studentId;
+          var sid = r.student_id;
           if (!scoresMap[sid]) {
-            scoresMap[sid] = { studentId: sid, name: r.name, maxScore: r.score, latestScore: r.score, examCount: 1, latestBlurCount: r.blurCount||0, maxBlurCount: r.blurCount||0, latestSubmitTime: r.submitTime };
+            scoresMap[sid] = { studentId: sid, name: r.name, maxScore: r.score, latestScore: r.score, examCount: 1, latestBlurCount: r.blur_count||0, maxBlurCount: r.blur_count||0, latestSubmitTime: r.submitTime };
           } else {
             var s = scoresMap[sid];
             s.maxScore = Math.max(s.maxScore, r.score);
             s.latestScore = r.score;
             s.examCount++;
-            s.maxBlurCount = Math.max(s.maxBlurCount, r.blurCount||0);
+            s.maxBlurCount = Math.max(s.maxBlurCount, r.blur_count||0);
             s.latestSubmitTime = r.submitTime;
           }
         });
@@ -1580,8 +1580,8 @@
         var records = res.results || [];
         var m = {};
         records.forEach(function(r) {
-          if (!m[r.studentId]) m[r.studentId] = { studentId:r.studentId, name:r.name, latestScore:r.score, maxBlurCount:r.blurCount||0, deviceModel:r.deviceModel||'未知' };
-          else { m[r.studentId].maxBlurCount = Math.max(m[r.studentId].maxBlurCount, r.blurCount||0); m[r.studentId].latestScore = r.score; }
+          if (!m[r.studentId]) m[r.studentId] = { studentId:r.studentId, name:r.name, latestScore:r.score, maxBlurCount:r.blur_count||0, deviceModel:r.device_model||'未知' };
+          else { m[r.studentId].maxBlurCount = Math.max(m[r.studentId].maxBlurCount, r.blur_count||0); m[r.studentId].latestScore = r.score; }
         });
         renderMonitorBody(Object.values(m), records, true);
       }).catch(function() { renderLocal(); });
