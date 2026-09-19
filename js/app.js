@@ -79,6 +79,30 @@
           renderPage(currentPage);
         }
       }).catch(function() {});
+
+      // 如果已有学号，从云端拉取该学生的历史成绩
+      if (state.userInfo && state.userInfo.studentId) {
+        Cloud.fetchRecordsByStudent(state.userInfo.studentId).then(function(records) {
+          if (records && records.length > 0) {
+            // 映射字段
+            var mapped = records.map(function(r) {
+              return {
+                studentId: r.student_id,
+                name: r.name,
+                score: r.score,
+                correctCount: r.correct_count,
+                totalCount: r.total_count,
+                duration: r.duration,
+                submitTime: r.submit_time,
+                isTimeout: r.is_timeout,
+                blurCount: r.blur_count
+              };
+            });
+            Storage.set('my_scores', mapped);
+            renderPage(currentPage);
+          }
+        }).catch(function() {});
+      }
     }
 
     // 加载用户信息
