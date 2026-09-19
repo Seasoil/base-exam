@@ -513,16 +513,11 @@
     }
 
     // 检查是否有未完成的进度
-    var keys = [];
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (k && k.indexOf('base_exam_exam_progress_') === 0) keys.push(k);
-    }
+    var progress = Storage.get('exam_progress', null);
 
-    if (keys.length > 0) {
-      // 有保存的进度，问是否继续
-      var lastKey = keys[keys.length - 1];
-      var progress = JSON.parse(localStorage.getItem(lastKey));
+    if (progress) {
+      var remainTime = Math.max(0, Math.floor((progress.endTime - Date.now()) / 1000));
+      if (remainTime > 0) {
       var remainTime = Math.max(0, Math.floor((progress.endTime - Date.now()) / 1000));
       if (remainTime > 0) {
         // 时间还有剩余，问是否继续
@@ -560,11 +555,13 @@
         return;
       } else {
         // 时间到了，清掉旧进度
-        keys.forEach(function(k) { localStorage.removeItem(k); });
+        Storage.remove('exam_progress');
       }
     }
 
-    startNewExam();
+    if (!progress || Math.floor((progress.endTime - Date.now()) / 1000) <= 0) {
+      startNewExam();
+    }
   }
 
   function startNewExam() {
@@ -775,6 +772,7 @@
     // 保存进度下次继续
     mask.querySelector('#exit-save-btn').onclick = function() {
       saveExamProgress();
+      saveMidProgress();
       mask.remove();
       renderPage('home');
       Util.showToast('进度已保存，考试期间可继续');
@@ -992,7 +990,7 @@
     }
 
     // 清除进度
-    Storage.remove('exam_progress_' + paper.paperId);
+    Storage.remove('exam_progress');
 
     state.examResult = record;
     state._submitting = false;
