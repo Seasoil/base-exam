@@ -783,6 +783,7 @@
       Cloud.uploadRecord({
         student_id: state.userInfo.studentId,
         name: state.userInfo.name,
+        clazz: state.userInfo.clazz || '',
         score: score,
         correct_count: correctCount,
         total_count: questions.length,
