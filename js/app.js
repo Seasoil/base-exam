@@ -44,6 +44,7 @@
     advancedMax: 15,
     advancedRatio: 0.3,
     typeWeights: {},
+    typeWeightsLocked: {},
     status: 0,
     adminPassword: 'cjdxjsjkxxy'
   };
@@ -1345,10 +1346,10 @@
             '<span class="type-config-name">' + t.name + '</span>' +
           '</label>' +
           '<div style="display:flex;align-items:center;gap:8px;">' +
-            '<input type="number" class="type-config-num" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" style="width:60px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;text-align:center;">' +
+            '<input type="number" class="type-config-num" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" ' + (t.locked ? 'disabled' : '') + ' style="width:60px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;text-align:center;">' +
             '<span style="width:30px;">%</span>' +
           '</div>' +
-          '<input type="range" class="type-config-slider" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" style="flex:1;">' +
+          '<input type="range" class="type-config-slider" min="0" max="100" value="' + Math.round(t.weight * 100) + '" data-type-id="' + t.id + '" oninput="window.App.updateTypeWeight(this)" ' + (t.locked ? 'disabled' : '') + ' style="flex:1;">' +
         '</div>';
     });
 
@@ -1419,10 +1420,28 @@
   window.App = {
     updateTypeWeight: function(el) {
       var typeId = el.dataset.typeId;
+      if (!state.examConfig.typeWeightsLocked) state.examConfig.typeWeightsLocked = {};
+      if (state.examConfig.typeWeightsLocked[typeId]) {
+        el.value = Math.round((state.examConfig.typeWeights[typeId] || 0) * 100);
+        Util.showToast('该题型已锁定，请先解锁');
+        return;
+      }
       var weight = parseInt(el.value) / 100;
       if (!state.examConfig.typeWeights) state.examConfig.typeWeights = {};
       state.examConfig.typeWeights[typeId] = weight;
       el.previousElementSibling.textContent = Math.round(weight * 100) + '%';
+    },
+    lockTypeWeight: function(el) {
+      var typeId = el.dataset.typeLock;
+      if (!state.examConfig.typeWeightsLocked) state.examConfig.typeWeightsLocked = {};
+      if (!state.examConfig.typeWeights) state.examConfig.typeWeights = {};
+      if (el.checked) {
+        state.examConfig.typeWeightsLocked[typeId] = true;
+        if (state.examConfig.typeWeights[typeId] == null) state.examConfig.typeWeights[typeId] = 1 / Converter.QUESTION_TYPES.length;
+      } else {
+        delete state.examConfig.typeWeightsLocked[typeId];
+      }
+      renderAdminConfig();
     },
     updateAdvancedRatio: function(el) {
       state.examConfig.advancedRatio = parseInt(el.value) / 100;
@@ -1468,7 +1487,22 @@
   }
 
   function resetTypeWeights() {
-    state.examConfig.typeWeights = {};
+    var lockedMap = state.examConfig.typeWeightsLocked || {};
+    var weights = state.examConfig.typeWeights || {};
+    var types = Converter.QUESTION_TYPES;
+    var lockedSum = 0, unlockedCount = 0;
+    types.forEach(function(t) {
+      if (lockedMap[t.id]) lockedSum += weights[t.id] || 0;
+      else unlockedCount++;
+    });
+    if (unlockedCount > 0) {
+      var remain = Math.max(0, 1 - lockedSum);
+      var share = remain / unlockedCount;
+      types.forEach(function(t) {
+        if (!lockedMap[t.id]) weights[t.id] = share;
+      });
+    }
+    state.examConfig.typeWeights = weights;
     renderAdminConfig();
   }
 
