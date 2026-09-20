@@ -107,6 +107,7 @@
 
     // 加载用户信息
     state.userInfo = Storage.get('userInfo', null);
+    if (state.userInfo && !state.userInfo.clazz) state.userInfo.clazz = '';
 
     // 加载学生名单
     state.studentList = Storage.get('student_list', []);
