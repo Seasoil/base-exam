@@ -64,9 +64,17 @@
       Cloud.fetchExamConfig().then(function(res) {
         if (res && res.length > 0 && res[0].data) {
           var cloudConfig = JSON.parse(res[0].data);
-          state.examConfig = cloudConfig;
-          Storage.set('exam_config', cloudConfig);
-          renderPage(currentPage);
+          var cloudAt = res[0].updated_at ? new Date(res[0].updated_at).getTime() : 0;
+          var localAt = config.updatedAt || 0;
+          if (cloudAt > localAt) {
+            state.examConfig = cloudConfig;
+            Storage.set('exam_config', cloudConfig);
+            renderPage(currentPage);
+          } else {
+            state.examConfig = config;
+            Storage.set('exam_config', config);
+            Cloud.saveExamConfig(config).catch(function() {});
+          }
         }
       }).catch(function() {});
 
@@ -216,6 +224,7 @@
       case 'toggle-exam-status': toggleExamStatus(); break;
       case 'go-admin-config': renderPage('admin-config'); break;
       case 'go-admin-scores': renderPage('admin-scores'); break;
+      case 'switch-score-view': window.App.switchScoreView(el); break;
       case 'go-admin-data': renderPage('admin-data'); break;
       case 'save-config': saveConfig(); break;
       case 'reset-config': resetConfig(); break;
@@ -701,7 +710,7 @@
     document.getElementById('exam-content').innerHTML =
       '<div class="exam-topbar">' +
         '<div class="exam-topbar-left" data-action="exit-exam" style="cursor:pointer;color:#ef4444;">← 退出</div>' +
-        '<div class="exam-topbar-center ' + (remaining <= 60 ? 'time-warning' : '') + '">⏱ ' + Util.formatDuration(remaining) + '</div>' +
+        '<div class="exam-topbar-center ' + (remaining <= 60 ? 'time-warning' : '') + '">第 ' + (state.currentIndex + 1) + '/' + paper.questions.length + ' 题 · ⏱ ' + Util.formatDuration(remaining) + '</div>' +
         '<div class="exam-topbar-right">累计 <span style="color:#22c55e;font-weight:600;">' + totalScore.toFixed(1) + '</span> 分</div>' +
       '</div>' +
 
@@ -968,6 +977,8 @@
       var q = questions[i];
       var userAnswer = answers[i] || '';
       var isCorrect = Converter.checkAnswer(q, userAnswer);
+      q.correct = isCorrect;
+      q.userAnswer = userAnswer;
       if (isCorrect) {
         correctCount++;
       } else {
@@ -1328,6 +1339,7 @@
       state.examConfig.status = newStatus;
       state.examConfig.startTime = null;
       state.examConfig.endTime = null;
+      state.examConfig.updatedAt = Date.now();
       Storage.set('exam_config', state.examConfig);
     // 上传到云端
     if (Cloud.isConfigured()) {
@@ -1459,6 +1471,10 @@
     },
     toggleAllowRetake: function(el) {
       state.examConfig.allowRetake = el.checked;
+    },
+    switchScoreView: function(el) {
+      state.adminScoreView = el.dataset.view;
+      renderScorePage(state.cloudRecords || []);
     }
   };
 
@@ -1467,6 +1483,7 @@
       Util.showToast('请输入考试名称');
       return;
     }
+    state.examConfig.updatedAt = Date.now();
     Storage.set('exam_config', state.examConfig);
     if (Cloud.isConfigured()) {
       Cloud.saveExamConfig(state.examConfig).catch(function() {});
@@ -1542,13 +1559,30 @@
           };
         });
         state.cloudRecords = records;
-        renderSessions(records);
+        renderScorePage(records);
       }).catch(function() {
-        renderSessions([]);
+        renderScorePage([]);
       });
     } else {
-      renderSessions([]);
+      renderScorePage([]);
     }
+  }
+
+  function renderScorePage(records) {
+    if (typeof state.adminScoreView !== 'string') state.adminScoreView = 'session';
+    var view = state.adminScoreView;
+    document.getElementById('admin-scores-content').innerHTML =
+      '<div class="admin-header">' +
+        '<div class="admin-title">成绩管理</div>' +
+        '<div class="admin-logout" data-action="go-admin">返回</div>' +
+      '</div>' +
+      '<div class="sort-tabs" style="margin-bottom:16px;">' +
+        '<div class="sort-tab ' + (view === 'session' ? 'active' : '') + '" data-action="switch-score-view" data-view="session">按考试场次</div>' +
+        '<div class="sort-tab ' + (view === 'class' ? 'active' : '') + '" data-action="switch-score-view" data-view="class">按班级</div>' +
+      '</div>' +
+      '<div id="score-view-body"></div>';
+    if (view === 'class') renderByClass(records);
+    else renderSessions(records);
   }
 
   function renderSessions(records) {
@@ -1669,14 +1703,56 @@
       });
     }
 
-    document.getElementById('admin-scores-content').innerHTML =
-      '<div class="admin-header">' +
-        '<div class="admin-title">成绩管理</div>' +
-        '<div class="admin-logout" data-action="go-admin">返回</div>' +
-      '</div>' +
+    document.getElementById('score-view-body').innerHTML =
       '<div class="card"><div class="card-title-row"><div class="card-title" style="margin:0;">考试场次</div><div class="count-badge">' + sessionKeys.length + ' 场</div></div>' +
       html +
       '</div>';
+  }
+
+  function renderByClass(records) {
+    var inListIds = {};
+    var hasList = state.studentList.length > 0;
+    state.studentList.forEach(function(s) { inListIds[s.studentId] = true; });
+    var classGroups = {};
+    records.forEach(function(r) {
+      var c = r.clazz || '未分班';
+      if (!classGroups[c]) classGroups[c] = [];
+      classGroups[c].push(r);
+    });
+    var classKeys = Object.keys(classGroups).sort();
+    var html = '';
+    classKeys.forEach(function(className) {
+      var recs = classGroups[className];
+      var studentMap = {};
+      recs.forEach(function(r) {
+        var sid = r.studentId;
+        if (!studentMap[sid] || r.isFinal) studentMap[sid] = r;
+      });
+      var students = Object.values(studentMap);
+      students.sort(function(a,b){return b.score - a.score;});
+      var classMax = students.length ? Math.max.apply(null, students.map(function(r){return r.score;})) : 0;
+      var classAvg = students.length ? Math.round(students.reduce(function(s,r){return s+r.score;},0) / students.length * 10) / 10 : 0;
+      html +=
+        '<div style="margin-bottom:16px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">' +
+          '<div style="background:#f8fafc;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">' +
+            '<div style="font-weight:600;font-size:15px;color:#3b82f6;">' + className + '</div>' +
+            '<div style="font-size:12px;color:var(--gray-500);">最高 ' + classMax + ' · 平均 ' + classAvg + ' · ' + students.length + '人</div>' +
+          '</div>';
+      students.forEach(function(r, idx) {
+        var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
+        var inList = !hasList || inListIds[r.studentId];
+        html +=
+          '<div class="score-row" data-action="view-student-detail" data-studentid="' + r.studentId + '" style="margin:0;border-radius:0;box-shadow:none;border-top:1px solid #f1f5f9;">' +
+            '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
+            '<div class="score-student"><div class="ss-name">' + r.name + (inList ? '' : ' <span style="color:#d97706;font-size:11px;">名单外</span>') + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
+            '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
+            '<div class="score-arrow">›</div>' +
+          '</div>';
+      });
+      html += '</div>';
+    });
+    if (classKeys.length === 0) html = '<div class="empty"><div class="empty-icon">📊</div><div>暂无成绩记录</div></div>';
+    document.getElementById('score-view-body').innerHTML = html;
   }
 
   function renderScoresList(scores) {
