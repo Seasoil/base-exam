@@ -913,7 +913,6 @@
           blur_count: state.blurCount || 0,
           device_fingerprint: state.deviceInfo.fingerprint,
           device_model: state.deviceInfo.deviceModel,
-          start_time: state.startTime,
           is_final: false
         }).catch(function() {});
       });
@@ -1052,7 +1051,6 @@
         total_count: questions.length,
         duration: duration,
         submit_time: now,
-        start_time: state.startTime,
         is_timeout: isTimeout,
         blur_count: blurCount,
         device_fingerprint: state.deviceInfo.fingerprint,
