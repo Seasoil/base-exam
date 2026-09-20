@@ -225,6 +225,7 @@
       case 'go-admin-config': renderPage('admin-config'); break;
       case 'go-admin-scores': renderPage('admin-scores'); break;
       case 'switch-score-view': window.App.switchScoreView(el); break;
+      case 'retry-scores': renderAdminScores(); break;
       case 'go-admin-data': renderPage('admin-data'); break;
       case 'save-config': saveConfig(); break;
       case 'reset-config': resetConfig(); break;
@@ -1538,7 +1539,14 @@
     var bodyEl = document.getElementById('admin-scores-content');
     if (bodyEl) bodyEl.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div>正在从云端加载...</div></div>';
     if (Cloud.isConfigured()) {
-      Cloud.fetchAllRecords(1000).then(function(records) {
+      var timeout = new Promise(function(resolve) {
+        setTimeout(function() { resolve('__TIMEOUT__'); }, 10000);
+      });
+      Promise.race([Cloud.fetchAllRecords(1000), timeout]).then(function(records) {
+        if (records === '__TIMEOUT__') {
+          if (bodyEl) bodyEl.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div>加载超时，请检查网络后重试</div><button class="btn btn-primary mt-16" data-action="retry-scores">重新加载</button></div>';
+          return;
+        }
         // 统一字段映射
         records = records.map(function(r) {
           return {
@@ -1561,7 +1569,7 @@
         state.cloudRecords = records;
         renderScorePage(records);
       }).catch(function() {
-        renderScorePage([]);
+        if (bodyEl) bodyEl.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div>加载失败，请检查网络后重试</div><button class="btn btn-primary mt-16" data-action="retry-scores">重新加载</button></div>';
       });
     } else {
       renderScorePage([]);
