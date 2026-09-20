@@ -288,9 +288,21 @@
         break;
       case 'config-start-time':
         state.examConfig.startTime = value ? new Date(value).getTime() : null;
+        if (state.examConfig.startTime && state.examConfig.endTime) {
+          var d1 = Math.max(1, Math.round((state.examConfig.endTime - state.examConfig.startTime) / 60000));
+          state.examConfig.duration = d1;
+        } else if (state.examConfig.startTime && state.examConfig.duration) {
+          state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
+        }
+        renderAdminConfig();
         break;
       case 'config-end-time':
         state.examConfig.endTime = value ? new Date(value).getTime() : null;
+        if (state.examConfig.startTime && state.examConfig.endTime) {
+          var d2 = Math.max(1, Math.round((state.examConfig.endTime - state.examConfig.startTime) / 60000));
+          state.examConfig.duration = d2;
+        }
+        renderAdminConfig();
         break;
       case 'config-exam-name':
         state.examConfig.examName = value;
@@ -300,6 +312,10 @@
         break;
       case 'config-duration':
         state.examConfig.duration = parseInt(value) || 30;
+        if (state.examConfig.startTime) {
+          state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
+          renderAdminConfig();
+        }
         break;
       case 'config-basic-max':
         state.examConfig.basicMax = Math.min(15, Math.max(0, parseInt(value) || 15));
