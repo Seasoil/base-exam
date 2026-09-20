@@ -506,8 +506,11 @@
       return;
     }
 
-    // 保存用户信息
+    // 保存用户信息（本地 + 云端同步）
     Storage.set('userInfo', state.userInfo);
+    if (Cloud.isConfigured()) {
+      Cloud.uploadStudentList([state.userInfo]).catch(function() {});
+    }
 
     // 绑定设备与学号（首次）
     if (!boundStudent) {

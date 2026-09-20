@@ -110,10 +110,36 @@ window.Cloud = (function() {
 
   // ========== 学生名单 ==========
   function uploadStudentList(students) {
-    var rows = students.map(function(s) {
-      return { student_id: s.studentId, name: s.name };
+    function build(includeClazz) {
+      return students.map(function(s) {
+        var row = { student_id: s.studentId, name: s.name };
+        if (includeClazz && s.clazz !== undefined && s.clazz !== null && s.clazz !== '') row.clazz = s.clazz;
+        return row;
+      });
+    }
+    function send(rows) {
+      return new Promise(function(resolve, reject) {
+        if (!isConfigured()) { reject(new Error('云端未配置')); return; }
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', config.url + '/rest/v1/students');
+        xhr.setRequestHeader('apikey', config.anonKey);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + config.anonKey);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Prefer', 'resolution=merge-duplicates,return=representation');
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+          else reject(new Error('HTTP ' + xhr.status + ': ' + xhr.responseText.substring(0, 200)));
+        };
+        xhr.onerror = function() { reject(new Error('网络请求失败')); };
+        xhr.send(JSON.stringify(rows));
+      });
+    }
+    return send(build(true)).catch(function(err) {
+      if (err.message.indexOf('clazz') >= 0 || err.message.indexOf('PGRST204') >= 0) {
+        return send(build(false));
+      }
+      throw err;
     });
-    return request('POST', '/students', rows);
   }
 
   function fetchStudentList() {
