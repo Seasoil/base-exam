@@ -485,22 +485,18 @@
       return;
     }
 
-    // 学生名单校验（如果名单不为空，必须匹配）
+    // 学生名单校验：在名单内才校验姓名班级；不在名单内直接放行（成绩单独归入名单外）
     if (state.studentList.length > 0) {
       var matched = state.studentList.find(function(s) {
         return s.studentId === state.userInfo.studentId;
       });
-      if (!matched) {
-        Util.showToast('学号不在考试名单中，请联系老师');
-        return;
-      }
       // 校验姓名是否匹配
-      if (matched.name !== state.userInfo.name) {
+      if (matched && matched.name !== state.userInfo.name) {
         Util.showToast('姓名与学号不匹配，请检查');
         return;
       }
       // 如果名单里有班级，校验班级是否匹配
-      if (matched.clazz && state.userInfo.clazz && matched.clazz !== state.userInfo.clazz) {
+      if (matched && matched.clazz && state.userInfo.clazz && matched.clazz !== state.userInfo.clazz) {
         Util.showToast('班级与学号不匹配，请检查');
         return;
       }
@@ -1581,9 +1577,16 @@
         var finalRecs = recs.filter(function(r){return r.isFinal;});
         var maxScore = recs.length > 0 ? Math.max.apply(null, recs.map(function(r){return r.score;})) : 0;
 
-        // 按班级分组
+        // 名单内/名单外拆分（未导入名单时全部按正常处理）
+        var hasList = state.studentList.length > 0;
+        var inListIds = {};
+        state.studentList.forEach(function(s) { inListIds[s.studentId] = true; });
+        var listedRecs = hasList ? recs.filter(function(r) { return inListIds[r.studentId]; }) : recs;
+        var unlistedRecs = hasList ? recs.filter(function(r) { return !inListIds[r.studentId]; }) : [];
+
+        // 按班级分组（仅名单内）
         var classGroups = {};
-        recs.forEach(function(r) {
+        listedRecs.forEach(function(r) {
           var c = r.clazz || '未分班';
           if (!classGroups[c]) classGroups[c] = [];
           classGroups[c].push(r);
@@ -1631,6 +1634,36 @@
 
           html += '</div>';
         });
+
+        // 名单外学生单独一块
+        if (unlistedRecs.length > 0) {
+          var umap = {};
+          unlistedRecs.forEach(function(r) {
+            var sid = r.studentId;
+            if (!umap[sid] || r.isFinal) umap[sid] = r;
+          });
+          var us = Object.values(umap);
+          us.sort(function(a,b){return b.score - a.score;});
+          var umax = Math.max.apply(null, us.map(function(r){return r.score;}));
+          var uavg = Math.round(us.reduce(function(s,r){return s+r.score;},0) / us.length * 10) / 10;
+          html +=
+            '<div style="padding:12px 16px;border-top:1px solid #f1f5f9;background:#fefce8;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+                '<div style="font-weight:600;color:#d97706;">名单外学生</div>' +
+                '<div style="font-size:12px;color:var(--gray-500);">最高 ' + umax + ' · 平均 ' + uavg + ' · ' + us.length + '人</div>' +
+              '</div>';
+          us.forEach(function(r, idx) {
+            var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
+            html +=
+              '<div class="score-row" data-action="view-student-detail" data-studentid="' + r.studentId + '">' +
+                '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
+                '<div class="score-student"><div class="ss-name">' + r.name + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
+                '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
+                '<div class="score-arrow">›</div>' +
+              '</div>';
+          });
+          html += '</div>';
+        }
 
         html += '</div>';
       });
