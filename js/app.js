@@ -308,10 +308,10 @@
         state.examConfig.examName = value;
         break;
       case 'config-total-questions':
-        state.examConfig.totalQuestions = parseInt(value) || 100;
+        state.examConfig.totalQuestions = Math.min(200, Math.max(1, parseInt(value) || 10));
         break;
       case 'config-duration':
-        state.examConfig.duration = parseInt(value) || 30;
+        state.examConfig.duration = Math.min(600, Math.max(1, parseInt(value) || 30));
         if (state.examConfig.startTime) {
           state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
           renderAdminConfig();
@@ -330,6 +330,16 @@
         renderAdminScores();
         break;
     }
+  }
+
+  // HTML 转义，防止用户输入注入脚本
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // 统一计算有效考试状态：0=未开始 1=进行中 2=已结束/已关闭（单一真源）
@@ -371,7 +381,7 @@
     state.studentList.forEach(function(s) { if (s.clazz) classSet[s.clazz] = true; });
     var classOptions = Object.keys(classSet);
     var classOptsHtml = '<option value="">请选择班级</option>' + classOptions.map(function(c) {
-      return '<option value="' + c + '">' + c + '</option>';
+      return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
     }).join('');
 
     if (state.userInfo && state.userInfo.studentId) {
@@ -1675,16 +1685,16 @@
           html +=
             '<div style="padding:12px 16px;border-top:1px solid #f1f5f9;">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-                '<div style="font-weight:600;color:#3b82f6;">' + className + '</div>' +
+                '<div style="font-weight:600;color:#3b82f6;">' + esc(className) + '</div>' +
                 '<div style="font-size:12px;color:var(--gray-500);">最高 ' + classMax + ' · 平均 ' + classAvg + ' · ' + students.length + '人</div>' +
               '</div>';
 
           students.forEach(function(r, idx) {
             var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
             html +=
-              '<div class="score-row" data-action="view-student-detail" data-studentid="' + r.studentId + '">' +
+              '<div class="score-row" data-action="view-student-detail" data-studentid="' + esc(r.studentId) + '">' +
                 '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
-                '<div class="score-student"><div class="ss-name">' + r.name + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
+                '<div class="score-student"><div class="ss-name">' + esc(r.name) + '</div><div class="ss-id">' + esc(r.studentId) + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
                 '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
                 '<div class="score-arrow">›</div>' +
               '</div>';
@@ -1766,9 +1776,9 @@
         var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
         var inList = !hasList || inListIds[r.studentId];
         html +=
-          '<div class="score-row" data-action="view-student-detail" data-studentid="' + r.studentId + '" style="margin:0;border-radius:0;box-shadow:none;border-top:1px solid #f1f5f9;">' +
+          '<div class="score-row" data-action="view-student-detail" data-studentid="' + esc(r.studentId) + '" style="margin:0;border-radius:0;box-shadow:none;border-top:1px solid #f1f5f9;">' +
             '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
-            '<div class="score-student"><div class="ss-name">' + r.name + (inList ? '' : ' <span style="color:#d97706;font-size:11px;">名单外</span>') + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
+            '<div class="score-student"><div class="ss-name">' + esc(r.name) + (inList ? '' : ' <span style="color:#d97706;font-size:11px;">名单外</span>') + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
             '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
             '<div class="score-arrow">›</div>' +
           '</div>';
@@ -1807,7 +1817,7 @@
         scoresHtml +=
           '<div class="score-row" data-action="view-student-detail" data-studentid="' + s.studentId + '">' +
             '<div class="score-rank ' + rankClass + '">' + (idx + 1) + '</div>' +
-            '<div class="score-student"><div class="ss-name">' + s.name + '</div><div class="ss-id">' + s.studentId + (s.clazz ? ' · ' + s.clazz : '') + '</div></div>' +
+            '<div class="score-student"><div class="ss-name">' + esc(s.name) + '</div><div class="ss-id">' + esc(s.studentId) + (s.clazz ? ' · ' + esc(s.clazz) : '') + '</div></div>' +
             '<div class="score-info-text"><div class="si-score">' + s.maxScore + '<span class="si-unit">分</span></div><div class="si-meta">最新：' + s.latestScore + '分 · ' + s.examCount + '次' + ((s.maxBlurCount || 0) > 0 ? ' · <span style="color:#EF4444;">切屏' + s.maxBlurCount + '次</span>' : '') + '</div></div>' +
             '<div class="score-arrow">›</div>' +
           '</div>';
@@ -2004,7 +2014,7 @@
         listHtml +=
           '<div class="student-row">' +
             '<div class="student-idx">' + (idx + 1) + '</div>' +
-            '<div class="student-info"><div class="student-sid">' + s.studentId + '</div><div class="student-sname">' + s.name + '</div></div>' +
+            '<div class="student-info"><div class="student-sid">' + esc(s.studentId) + '</div><div class="student-sname">' + esc(s.name) + '</div></div>' +
           '</div>';
       });
     }
@@ -2191,12 +2201,23 @@
       '确认清空').then(function(confirmed) {
       if (!confirmed) return;
       state.studentList = [];
-    // 同步清空云端
-    if (Cloud.isConfigured()) {
-      Cloud.clearStudentList().catch(function() {});
-    }
       Storage.set('student_list', []);
-      Util.showToast('已清空', 'success');
+      // 同步清空云端（匿名key可能无删除权限，失败时提示去Dashboard清空）
+      if (Cloud.isConfigured()) {
+        Cloud.clearStudentList().then(function() {
+          return Cloud.fetchStudentList();
+        }).then(function(list) {
+          if (list && list.length > 0) {
+            Util.showToast('云端清空失败，请在Supabase Dashboard手动清空', 'error');
+          } else {
+            Util.showToast('已清空', 'success');
+          }
+        }).catch(function() {
+          Util.showToast('云端清空失败，请在Supabase Dashboard手动清空', 'error');
+        });
+      } else {
+        Util.showToast('已清空', 'success');
+      }
       renderAdminStudents();
     });
   }
@@ -2304,7 +2325,7 @@
     var html = rows.length===0 ? '<div class="empty">暂无考试数据</div>' :
       rows.map(function(r){
         var w = r.blur>0?'warning':'';
-        return '<div class="monitor-row '+w+'"><div class="monitor-main"><div class="monitor-name">'+r.name+' <span class="monitor-sid">'+r.sid+'</span></div><div class="monitor-device">📱 '+r.dev+'</div></div><div class="monitor-right"><div class="monitor-score">'+r.score+'分</div><div class="monitor-blur '+(r.blur>0?'has-blur':'')+'">切屏 '+r.blur+'次</div></div></div>';
+        return '<div class="monitor-row '+w+'"><div class="monitor-main"><div class="monitor-name">'+esc(r.name)+' <span class="monitor-sid">'+esc(r.sid)+'</span></div><div class="monitor-device">📱 '+esc(r.dev)+'</div></div><div class="monitor-right"><div class="monitor-score">'+r.score+'分</div><div class="monitor-blur '+(r.blur>0?'has-blur':'')+'">切屏 '+r.blur+'次</div></div></div>';
       }).join('');
     bodyEl.innerHTML =
       '<div class="monitor-summary">'+
