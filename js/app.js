@@ -527,6 +527,17 @@
     // 检查是否有未完成的进度
     var progress = Storage.get('exam_progress', null);
 
+    // 旧进度若包含超15的题目，作废并重新出卷
+    if (progress && progress.paper && progress.paper.questions) {
+      var over15 = progress.paper.questions.some(function(q) {
+        return parseInt(q.sourceValue, q.fromBase) > 15 || parseInt(q.answer, q.toBase) > 15;
+      });
+      if (over15) {
+        Storage.remove('exam_progress');
+        progress = null;
+      }
+    }
+
     if (progress) {
       var remainTime = Math.max(0, Math.floor((progress.endTime - Date.now()) / 1000));
       if (remainTime > 0) {
