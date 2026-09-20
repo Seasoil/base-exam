@@ -351,11 +351,11 @@
           '<label class="form-label">姓名</label>' +
           '<input class="form-input" type="text" data-input="student-name" placeholder="请输入姓名" maxlength="20" value="' + (state.userInfo ? state.userInfo.name || '' : '') + '">' +
         '</div>' +
-        (classOptions.length > 0 ?
-          '<div class="form-group">' +
-            '<label class="form-label">班级</label>' +
-            '<select class="form-input" data-input="student-class">' + classOptsHtml + '</select>' +
-          '</div>' : '');
+        '<div class="form-group">' +
+          '<label class="form-label">班级</label>' +
+          '<input class="form-input" type="text" data-input="student-class" placeholder="请输入班级，如：计科2401" maxlength="30" value="' + (state.userInfo ? state.userInfo.clazz || '' : '') + '" list="class-list">' +
+          '<datalist id="class-list">' + classOptsHtml.replace('<option value="">请选择班级</option>', '') + '</datalist>' +
+        '</div>';
     }
 
     var startBtnText = status === 0 ? '考试未开始' : status === 2 ? '考试已结束' : '开始考试';
@@ -456,6 +456,10 @@
     }
     if (!Util.validateName(state.userInfo.name)) {
       Util.showToast('姓名格式不正确（2-20个字符）');
+      return;
+    }
+    if (!state.userInfo.clazz || !state.userInfo.clazz.trim()) {
+      Util.showToast('请输入班级');
       return;
     }
 
