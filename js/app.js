@@ -311,9 +311,13 @@
     var now = Date.now();
     if (config.startTime && now < config.startTime) return 0;
     if (config.endTime && now > config.endTime) return 2;
-    if (config.status === 1) return 1;
-    if (config.status === 2) return 2;
-    return 0;
+    var hasTiming = config.startTime || config.endTime;
+    if (!hasTiming) {
+      if (config.status === 1) return 1;
+      if (config.status === 2) return 2;
+      return 0;
+    }
+    return 1;
   }
   // ========== 首页 ==========
   function renderHome() {
@@ -420,12 +424,19 @@
 
     // 启动倒计时刷新（只更新倒计时文字，不重建整个页面，避免输入中断）
     if (state._homeTimer) clearInterval(state._homeTimer);
+    var lastStatus = computeExamStatus(state.examConfig);
     state._homeTimer = setInterval(function() {
       if (state.currentPage !== 'home') return;
-      var el = document.getElementById('home-countdown');
-      if (!el) return;
       var cfg = state.examConfig;
       var now = Date.now();
+      var curStatus = computeExamStatus(cfg);
+      if (curStatus !== lastStatus) {
+        lastStatus = curStatus;
+        renderHome();
+        return;
+      }
+      var el = document.getElementById('home-countdown');
+      if (!el) return;
       var text;
       if (cfg.startTime && now < cfg.startTime) {
         text = '距离考试开始还有 ' + Util.formatDuration(Math.floor((cfg.startTime - now) / 1000));
@@ -523,14 +534,15 @@
       Storage.set('device_bindings', deviceBindings);
     }
 
-    // 检查考试状态
+    // 检查考试状态（与学生首页统一）
     var config = state.examConfig;
     var now = Date.now();
-    if (config.startTime && now < config.startTime) {
+    var st = computeExamStatus(config);
+    if (st === 0) {
       Util.showToast('考试尚未开始');
       return;
     }
-    if (config.endTime && now > config.endTime) {
+    if (st === 2) {
       Util.showToast('考试已结束');
       return;
     }
@@ -1318,6 +1330,8 @@
     Util.showModal(actionText + '考试', '确定要' + actionText + '考试吗？' + (newStatus === 2 ? '关闭后学生将无法进入考试。' : ''), '确认' + actionText).then(function(confirmed) {
       if (!confirmed) return;
       state.examConfig.status = newStatus;
+      state.examConfig.startTime = null;
+      state.examConfig.endTime = null;
       Storage.set('exam_config', state.examConfig);
     // 上传到云端
     if (Cloud.isConfigured()) {
