@@ -32,21 +32,13 @@ window.Converter = (function() {
 
   function generateQuestion(type, config) {
     config = config || {};
-    var basicMax = config.basicMax || 255;
-    var advancedMax = config.advancedMax || 1024;
-    var advancedRatio = config.advancedRatio != null ? config.advancedRatio : 0.3;
-    var isAdvanced = Math.random() < advancedRatio;
-    var maxDec = isAdvanced ? advancedMax : basicMax;
+    var maxDec = 15;
 
     var sourceValue;
     if (type.fromBase === 10) {
       sourceValue = String(randomInt(0, maxDec));
     } else if (type.fromBase === 2) {
-      var bits = isAdvanced ? randomInt(8, 12) : randomInt(2, 8);
-      var bin = '';
-      for (var i = 0; i < bits; i++) bin += Math.random() < 0.5 ? '0' : '1';
-      if (bin.length > 1 && bin[0] === '0') bin = '1' + bin.slice(1);
-      sourceValue = bin;
+      sourceValue = decToBase(randomInt(0, 15), 2);
     } else if (type.fromBase === 8) {
       sourceValue = decToBase(randomInt(0, maxDec), 8);
     } else if (type.fromBase === 16) {

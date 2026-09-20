@@ -40,8 +40,8 @@
     duration: 30,
     totalQuestions: 100,
     allowRetake: true,
-    basicMax: 255,
-    advancedMax: 1024,
+    basicMax: 15,
+    advancedMax: 15,
     advancedRatio: 0.3,
     typeWeights: {},
     status: 0,
@@ -291,10 +291,10 @@
         state.examConfig.duration = parseInt(value) || 30;
         break;
       case 'config-basic-max':
-        state.examConfig.basicMax = parseInt(value) || 255;
+        state.examConfig.basicMax = Math.min(15, Math.max(0, parseInt(value) || 15));
         break;
       case 'config-advanced-max':
-        state.examConfig.advancedMax = parseInt(value) || 1024;
+        state.examConfig.advancedMax = Math.min(15, Math.max(0, parseInt(value) || 15));
         break;
       case 'cloud-url': state._cloudUrl = value; break;
       case 'cloud-key': state._cloudKey = value; break;
@@ -1377,12 +1377,8 @@
         '<div class="form-group switch-item"><label class="form-label">允许多次考试（刷分）</label><label class="switch"><input type="checkbox" ' + (config.allowRetake ? 'checked' : '') + ' onchange="window.App.toggleAllowRetake(this)"><span class="slider"></span></label></div>' +
       '</div>' +
 
-      '<div class="card"><div class="card-title">难度配置</div>' +
-        '<div class="form-row">' +
-          '<div class="form-group flex-1"><label class="form-label">基础题最大值</label><input class="form-input" type="number" data-input="config-basic-max" value="' + config.basicMax + '"></div>' +
-          '<div class="form-group flex-1"><label class="form-label">进阶题最大值</label><input class="form-input" type="number" data-input="config-advanced-max" value="' + config.advancedMax + '"></div>' +
-        '</div>' +
-        '<div class="form-group"><label class="form-label">进阶题占比：' + Math.round(config.advancedRatio * 100) + '%</label><input type="range" class="full-slider" min="0" max="100" value="' + Math.round(config.advancedRatio * 100) + '" oninput="window.App.updateAdvancedRatio(this)"></div>' +
+      '<div class="card"><div class="card-title">难度说明</div>' +
+        '<div class="card-desc">每道题的题目数值与答案数值均不超过 15，适合进制转换入门练习。</div>' +
       '</div>' +
 
       '<div class="card"><div class="card-title-row"><div class="card-title">题型权重配置</div><div class="reset-link" data-action="reset-type-weights">重置为平均</div></div>' +
