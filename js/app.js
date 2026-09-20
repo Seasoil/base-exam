@@ -305,13 +305,20 @@
     }
   }
 
+  // 统一计算有效考试状态：0=未开始 1=进行中 2=已结束/已关闭（单一真源）
+  function computeExamStatus(config) {
+    var now = Date.now();
+    if (config.startTime && now < config.startTime) return 0;
+    if (config.endTime && now > config.endTime) return 2;
+    if (config.status === 1) return 1;
+    if (config.status === 2) return 2;
+    return 0;
+  }
   // ========== 首页 ==========
   function renderHome() {
     var config = state.examConfig;
     var now = Date.now();
-    var status = config.status;
-    if (config.startTime && now < config.startTime) status = 0;
-    else if (config.endTime && now > config.endTime) status = 2;
+    var status = computeExamStatus(config);
 
     var countdownText = '';
     if (config.startTime && now < config.startTime) {
@@ -1243,10 +1250,11 @@
       maxScore: scores.length > 0 ? Math.max.apply(null, scores.map(function(s) { return s.maxScore; })) : 0
     };
 
-    var statusText = config.status === 1 ? '进行中' : config.status === 0 ? '未开始' : '已结束';
-    var statusClass = config.status === 1 ? 'status-open' : 'status-closed';
-    var toggleBtnText = config.status === 1 ? '关闭考试' : '开启考试';
-    var toggleBtnClass = config.status === 1 ? 'btn-danger' : 'btn-primary';
+    var _s = computeExamStatus(config);
+    var statusText = _s === 1 ? '进行中' : (_s === 0 ? '未开始' : '已结束');
+    var statusClass = _s === 1 ? 'status-open' : 'status-closed';
+    var toggleBtnText = _s === 1 ? '关闭考试' : '开启考试';
+    var toggleBtnClass = _s === 1 ? 'btn-danger' : 'btn-primary';
 
     document.getElementById('admin-content').innerHTML =
       '<div class="admin-header">' +
@@ -1300,7 +1308,8 @@
   }
 
   function toggleExamStatus() {
-    var newStatus = state.examConfig.status === 1 ? 2 : 1;
+    var cur = computeExamStatus(state.examConfig);
+    var newStatus = cur === 1 ? 2 : 1;
     var actionText = newStatus === 1 ? '开启' : '关闭';
     Util.showModal(actionText + '考试', '确定要' + actionText + '考试吗？' + (newStatus === 2 ? '关闭后学生将无法进入考试。' : ''), '确认' + actionText).then(function(confirmed) {
       if (!confirmed) return;
@@ -1311,7 +1320,7 @@
       Cloud.saveExamConfig(state.examConfig).catch(function() {});
     }
       Util.showToast('已' + actionText + '考试', 'success');
-      renderAdmin();
+      renderPage(state.currentPage);
     });
   }
 
@@ -1340,8 +1349,9 @@
         '</div>';
     });
 
-    var statusText = config.status === 1 ? '进行中' : (config.status === 2 ? '已结束' : '未开启');
-    var statusColor = config.status === 1 ? '#22c55e' : (config.status === 2 ? '#64748b' : '#ef4444');
+    var _sc = computeExamStatus(config);
+    var statusText = _sc === 1 ? '进行中' : (_sc === 2 ? '已结束' : '未开启');
+    var statusColor = _sc === 1 ? '#22c55e' : (_sc === 2 ? '#64748b' : '#ef4444');
     // 格式化时间
     function fmtTs(ts) {
       if (!ts) return '';
@@ -1356,7 +1366,7 @@
           '<div style="width:10px;height:10px;border-radius:50%;background:' + statusColor + ';"></div>' +
           '<div style="font-size:18px;font-weight:600;color:' + statusColor + ';">当前状态：' + statusText + '</div>' +
         '</div>' +
-        '<button class="btn btn-primary" style="width:100%;" data-action="toggle-exam-status">' + (config.status === 1 ? '关闭考试' : '开启考试') + '</button>' +
+        '<button class="btn btn-primary" style="width:100%;" data-action="toggle-exam-status">' + (_sc === 1 ? '关闭考试' : '开启考试') + '</button>' +
       '</div>' +
 
       '<div class="card"><div class="card-title">定时设置</div>' +
