@@ -1440,6 +1440,9 @@
       return;
     }
     Storage.set('exam_config', state.examConfig);
+    if (Cloud.isConfigured()) {
+      Cloud.saveExamConfig(state.examConfig).catch(function() {});
+    }
     Util.showToast('保存成功', 'success');
     setTimeout(function() { renderPage('admin'); }, 1000);
   }
