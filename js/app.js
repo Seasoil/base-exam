@@ -24,6 +24,7 @@
     isAdmin: false,
     adminSortBy: 'maxScore',
     adminSearchKeyword: '',
+    selectedClasses: {},
     titleClickCount: 0,
     // 防作弊相关
     deviceInfo: null,
@@ -233,6 +234,7 @@
       case 'reset-type-weights': resetTypeWeights(); break;
       case 'sort-scores': sortScores(params.sort); break;
       case 'export-scores': exportScores(); break;
+      case 'export-selected-classes': exportSelectedClasses(); break;
       case 'view-student-detail': viewStudentDetail(params.studentid); break;
       case 'clear-exam-data': clearExamData(); break;
       case 'reset-all': resetAll(); break;
@@ -1502,7 +1504,23 @@
     switchScoreView: function(el) {
       state.adminScoreView = el.dataset.view;
       renderScorePage(state.cloudRecords || []);
-    }
+    },
+    toggleClassCheck: function(el) {
+      state.selectedClasses[el.dataset.classCheck] = el.checked;
+      var recs = state.cloudRecords || [];
+      var classes = {};
+      recs.forEach(function(r) { classes[r.clazz || '未分班'] = true; });
+      var anyUnchecked = Object.keys(classes).some(function(c) { return state.selectedClasses[c] === false; });
+      var all = document.getElementById('check-all-classes');
+      if (all) all.checked = !anyUnchecked;
+    },
+    toggleAllClasses: function(el) {
+      var recs = state.cloudRecords || [];
+      var classes = {};
+      recs.forEach(function(r) { classes[r.clazz || '未分班'] = true; });
+      Object.keys(classes).forEach(function(c) { state.selectedClasses[c] = el.checked; });
+      renderScorePage(recs);
+    },
   };
 
   function saveConfig() {
@@ -1605,6 +1623,9 @@
   function renderScorePage(records) {
     if (typeof state.adminScoreView !== 'string') state.adminScoreView = 'session';
     var view = state.adminScoreView;
+    var classSetAll = {};
+    records.forEach(function(r) { classSetAll[r.clazz || '未分班'] = true; });
+    var allChecked = !Object.keys(classSetAll).some(function(c) { return state.selectedClasses[c] === false; });
     document.getElementById('admin-scores-content').innerHTML =
       '<div class="admin-header">' +
         '<div class="admin-title">成绩管理</div>' +
@@ -1614,6 +1635,10 @@
         '<div class="sort-tab ' + (view === 'session' ? 'active' : '') + '" data-action="switch-score-view" data-view="session">按考试场次</div>' +
         '<div class="sort-tab ' + (view === 'class' ? 'active' : '') + '" data-action="switch-score-view" data-view="class">按班级</div>' +
       '</div>' +
+      (view === 'class' ? '<div class="scores-toolbar" style="display:flex;align-items:center;gap:12px;">' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="check-all-classes" onchange="window.App.toggleAllClasses(this)" ' + (allChecked ? 'checked' : '') + '> 全选班级</label>' +
+        '<button class="btn btn-primary btn-sm" data-action="export-selected-classes">📥 导出勾选班级</button>' +
+      '</div>' : '') +
       '<div id="score-view-body"></div>';
     if (view === 'class') renderByClass(records);
     else renderSessions(records);
@@ -1769,7 +1794,10 @@
       html +=
         '<div style="margin-bottom:16px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">' +
           '<div style="background:#f8fafc;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">' +
-            '<div style="font-weight:600;font-size:15px;color:#3b82f6;">' + className + '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;">' +
+              '<input type="checkbox" data-class-check="' + esc(className) + '" ' + (state.selectedClasses[className] !== false ? 'checked' : '') + ' onchange="window.App.toggleClassCheck(this)" style="width:16px;height:16px;cursor:pointer;">' +
+              '<span style="font-weight:600;font-size:15px;color:#3b82f6;">' + esc(className) + '</span>' +
+            '</div>' +
             '<div style="font-size:12px;color:var(--gray-500);">最高 ' + classMax + ' · 平均 ' + classAvg + ' · ' + students.length + '人</div>' +
           '</div>';
       students.forEach(function(r, idx) {
@@ -1855,6 +1883,73 @@
     if (scores.length === 0) { Util.showToast('暂无成绩可导出'); return; }
     Util.exportCSV(scores);
     Util.showToast('导出成功', 'success');
+  }
+
+  // XML/Excel 转义
+  function xmlEsc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  // 导出勾选班级成绩为Excel（每班一个工作表）
+  function exportSelectedClasses() {
+    var records = state.cloudRecords || [];
+    if (!records.length) { Util.showToast('暂无成绩可导出'); return; }
+
+    // 收集班名 + 每班学生（取最终/max）
+    var classRecs = {};
+    records.forEach(function(r) {
+      var c = r.clazz || '未分班';
+      if (!classRecs[c]) classRecs[c] = [];
+      classRecs[c].push(r);
+    });
+    var classNames = Object.keys(classRecs).sort();
+    var selected = classNames.filter(function(c) { return state.selectedClasses[c] !== false; });
+    if (selected.length === 0) { Util.showToast('请先勾选班级'); return; }
+
+    // 构建 SpreadsheetML XML 多 sheet
+    var xml = '<?xml version="1.0"?>' +
+      '<?mso-application progid="Excel.Sheet"?>' +
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
+
+    selected.forEach(function(className) {
+      var recs = classRecs[className];
+      var studentMap = {};
+      recs.forEach(function(r) {
+        var sid = r.studentId;
+        if (!studentMap[sid] || r.isFinal) studentMap[sid] = r;
+      });
+      var students = Object.values(studentMap);
+      students.sort(function(a,b){return b.score - a.score;});
+
+      xml += '<Worksheet ss:Name="' + xmlEsc(String(className).replace(/[\/:*?[\]]/g, '_')) + '"><Table>';
+      var headers = ['排名','学号','姓名','班级','成绩','正确数','总题数','是否交卷','切屏次数','提交时间'];
+      xml += '<Row>' + headers.map(function(h){ return '<Cell><Data ss:Type="String">' + xmlEsc(h) + '</Data></Cell>'; }).join('') + '</Row>';
+      students.forEach(function(s, i) {
+        var cells = [i+1, s.studentId, s.name, s.clazz || className, s.score, s.correctCount != null ? s.correctCount : '', s.totalCount != null ? s.totalCount : '', s.isFinal ? '已交卷' : '未交卷', s.blurCount || 0, s.submitTime ? Util.formatTime(s.submitTime) : ''];
+        xml += '<Row>' + cells.map(function(c) {
+          var isNum = typeof c === 'number';
+          return '<Cell><Data ss:Type="' + (isNum ? 'Number' : 'String') + '">' + xmlEsc(c) + '</Data></Cell>';
+        }).join('') + '</Row>';
+      });
+      xml += '</Table></Worksheet>';
+    });
+    xml += '</Workbook>';
+
+    var blob = new Blob(['﻿' + xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '成绩导出_按班级_' + Util.formatTime(Date.now(), 'YYYYMMDD_HHmmss') + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    Util.showToast('已导出 ' + selected.length + ' 个班级', 'success');
   }
 
   function viewStudentDetail(studentId) {
