@@ -1953,9 +1953,15 @@
   }
 
   function viewStudentDetail(studentId) {
-    var records = Storage.get('exam_records', [])
-      .filter(function(r) { return r.studentId === studentId; })
-      .sort(function(a, b) { return b.submitTime - a.submitTime; });
+    // 优先用云端成绩记录，本地作为兜底
+    var records = [];
+    if (state.cloudRecords && state.cloudRecords.length > 0) {
+      records = state.cloudRecords.filter(function(r) { return r.studentId === studentId; });
+    }
+    if (records.length === 0) {
+      records = Storage.get('exam_records', []).filter(function(r) { return r.studentId === studentId; });
+    }
+    records.sort(function(a, b) { return (b.submitTime || 0) - (a.submitTime || 0); });
 
     if (records.length === 0) {
       Util.showToast('该学生暂无考试记录');
@@ -1977,8 +1983,8 @@
         '<div class="detail-record">' +
           '<div class="dr-score ' + scoreClass + '">' + r.score + '</div>' +
           '<div class="dr-content">' +
-            '<div>正确 ' + (r.correct_count || r.correctCount) + '/' + (r.total_count || r.totalCount) + ' · 用时 ' + Util.formatDuration(r.duration) + '</div>' +
-            '<div class="dr-time">' + Util.formatTime(r.submit_time || r.submitTime) + '</div>' +
+            '<div>正确 ' + (r.correctCount != null ? r.correctCount : (r.correct_count || 0)) + '/' + (r.totalCount != null ? r.totalCount : (r.total_count || 0)) + ' · 用时 ' + Util.formatDuration(r.duration || 0) + '</div>' +
+            '<div class="dr-time">' + Util.formatTime(r.submitTime || r.submit_time || Date.now()) + '</div>' +
           '</div>' +
         '</div>';
     });
