@@ -42,6 +42,7 @@
     startTime: null,
     endTime: null,
     duration: 30,
+    answerDuration: null,
     totalQuestions: 100,
     allowRetake: true,
     basicMax: 15,
@@ -324,6 +325,14 @@
       case 'config-duration-unit':
         state._durUnit = value;
         App_updateDuration();
+        break;
+      case 'config-answer-duration-value':
+        state._ansValue = parseInt(value) || 1;
+        App_updateAnswerDuration();
+        break;
+      case 'config-answer-duration-unit':
+        state._ansUnit = value;
+        App_updateAnswerDuration();
         break;
       case 'config-basic-max':
         state.examConfig.basicMax = Math.min(15, Math.max(0, parseInt(value) || 15));
@@ -665,7 +674,7 @@
   function startNewExam() {
     var config = state.examConfig;
     Util.showModal('开始考试',
-      '本次考试共 ' + config.totalQuestions + ' 题，时长 ' + config.duration + ' 分钟。\n\n' +
+      '本次考试共 ' + config.totalQuestions + ' 题，答题时限 ' + (config.answerDuration != null ? Math.min(config.answerDuration, config.duration) : config.duration) + ' 分钟。\n\n' +
       '⚠️ 考试期间请不要切换到其他应用或页面，切屏将被记录。\n\n确定要开始吗？',
       '开始考试').then(function(confirmed) {
       if (!confirmed) return;
@@ -684,7 +693,8 @@
       state.submittedAnswers = [];
       state.currentScore = 0;
       state.startTime = Date.now();
-      state.endTime = Date.now() + config.duration * 60 * 1000;
+      var ansDur = config.answerDuration != null ? Math.min(config.answerDuration, config.duration) : config.duration;
+      state.endTime = Date.now() + ansDur * 60 * 1000;
       state.blurCount = 0;
 
       // 启动切屏监控
@@ -1436,6 +1446,13 @@
     else { durValue = durMin; durUnit = 'm'; }
     state._durValue = durValue;
     state._durUnit = durUnit;
+    var ansMin = config.answerDuration != null ? config.answerDuration : durMin;
+    var ansValue, ansUnit;
+    if (ansMin % 1440 === 0) { ansValue = ansMin / 1440; ansUnit = 'd'; }
+    else if (ansMin % 60 === 0) { ansValue = ansMin / 60; ansUnit = 'h'; }
+    else { ansValue = ansMin; ansUnit = 'm'; }
+    state._ansValue = ansValue;
+    state._ansUnit = ansUnit;
     var questionTypes = Converter.QUESTION_TYPES.map(function(t) {
       var weight = config.typeWeights && config.typeWeights[t.id] != null ? config.typeWeights[t.id] : (1 / Converter.QUESTION_TYPES.length);
       var locked = config.typeWeightsLocked && config.typeWeightsLocked[t.id] ? true : false;
@@ -1488,7 +1505,7 @@
         '<div class="form-group"><label class="form-label">考试名称</label><input class="form-input" type="text" data-input="config-exam-name" value="' + config.examName + '"></div>' +
         '<div class="form-row">' +
           '<div class="form-group flex-1"><label class="form-label">题目数量</label><input class="form-input" type="number" data-input="config-total-questions" value="' + config.totalQuestions + '"></div>' +
-          '<div class="form-group flex-1"><label class="form-label">考试时长</label><div style="display:flex;gap:8px;">' +
+          '<div class="form-group flex-1"><label class="form-label">考试持续时间（可进入窗口）</label><div style="display:flex;gap:8px;">' +
           '<input class="form-input" type="number" data-input="config-duration-value" value="' + durValue + '" min="1" style="flex:1;">' +
           '<select class="form-input" data-input="config-duration-unit" style="width:80px;">' +
             '<option value="d" ' + (durUnit === 'd' ? 'selected' : '') + '>天</option>' +
@@ -1496,8 +1513,17 @@
             '<option value="m" ' + (durUnit === 'm' ? 'selected' : '') + '>分钟</option>' +
           '</select>' +
         '</div>' +
-        '<div class="card-desc" style="margin-top:4px;">可选天/小时/分钟，最长30天</div></div>' +
+        '<div class="card-desc" style="margin-top:4px;">学生可在这段时间内进入考试</div></div>' +
         '</div>' +
+        '<div class="form-group"><label class="form-label">进入后答题时限（最长不超过持续时间）</label><div style="display:flex;gap:8px;">' +
+          '<input class="form-input" type="number" data-input="config-answer-duration-value" value="' + ansValue + '" min="1" style="flex:1;">' +
+          '<select class="form-input" data-input="config-answer-duration-unit" style="width:80px;">' +
+            '<option value="d" ' + (ansUnit === 'd' ? 'selected' : '') + '>天</option>' +
+            '<option value="h" ' + (ansUnit === 'h' ? 'selected' : '') + '>小时</option>' +
+            '<option value="m" ' + (ansUnit === 'm' ? 'selected' : '') + '>分钟</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="card-desc" style="margin-top:4px;">单个学生进入后的实际答题倒计时，默认等于持续时间</div></div>' +
         '<div class="form-group switch-item"><label class="form-label">允许多次考试（刷分）</label><label class="switch"><input type="checkbox" ' + (config.allowRetake ? 'checked' : '') + ' onchange="window.App.toggleAllowRetake(this)"><span class="slider"></span></label></div>' +
       '</div>' +
 
@@ -1539,6 +1565,16 @@
       state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
       renderAdminConfig();
     }
+  }
+
+  // 答题时限换算：数值 + 单位 -> 分钟（不超过持续时间）
+  function App_updateAnswerDuration() {
+    var v = state._ansValue || 1;
+    var u = state._ansUnit || 'm';
+    var minutes = u === 'd' ? v * 1440 : (u === 'h' ? v * 60 : v);
+    var maxAns = state.examConfig.duration || 43200;
+    state.examConfig.answerDuration = Math.min(maxAns, Math.max(1, minutes));
+    renderAdminConfig();
   }
 
   // 暴露给内联事件的方法
@@ -2383,43 +2419,43 @@
 
   // 删除勾选的成绩数据（每次都要输入管理员密码）
   function deleteSelectedScores() {
+    var recs = state.cloudRecords || [];
     var sids = Object.keys(state.selectedScoreStudents).filter(function(k) { return state.selectedScoreStudents[k]; });
-    if (sids.length === 0) { Util.showToast('请先勾选要删除的学生成绩'); return; }
-
-    var pwd = prompt('请输入管理员密码以确认删除（' + sids.length + ' 名学生）：');
-    if (pwd === null) return;
-    if (pwd !== state.examConfig.adminPassword) {
-      Util.showToast('密码错误，未删除', 'error');
-      return;
-    }
-
+    // 勾选班级：把这些班级的学生全部纳入删除
+    var delClasses = Object.keys(state.selectedClasses).filter(function(c) { return state.selectedClasses[c] === true; });
     var sidSet = {};
     sids.forEach(function(s) { sidSet[s] = true; });
-    var recs = state.cloudRecords || [];
-    var delIds = recs.filter(function(r) { return sidSet[r.studentId]; }).map(function(r) { return r.id; });
-
-    // 先更新本地界面（立即移除）
-    state.cloudRecords = recs.filter(function(r) { return !sidSet[r.studentId]; });
-    // 同步删除本地缓存
-    var localList = Storage.get('exam_records', []).filter(function(r) { return !sidSet[r.studentId]; });
-    Storage.set('exam_records', localList);
-    var localScores = Storage.get('scores', []).filter(function(s) { return !sidSet[s.studentId]; });
-    Storage.set('scores', localScores);
-    state.selectedScoreStudents = {};
-
-    // 尝试删云端（若匿名key无DELETE权限会失败，提示）
-    if (Cloud.isConfigured() && delIds.length > 0) {
-      Cloud.deleteRecords(delIds).then(function() {
-        Util.showToast('已删除 ' + sids.length + ' 名学生的成绩', 'success');
-        renderScorePage(state.cloudRecords || []);
-      }).catch(function() {
-        Util.showToast('本地已删，云端删除需在Supabase授权后生效', 'error');
-        renderScorePage(state.cloudRecords || []);
+    if (delClasses.length > 0) {
+      recs.forEach(function(r) {
+        if (delClasses.indexOf(r.clazz || '未分班') >= 0) sidSet[r.studentId] = true;
       });
-    } else {
-      Util.showToast('已删除 ' + sids.length + ' 名学生的成绩', 'success');
-      renderScorePage(state.cloudRecords || []);
     }
+    var allSids = Object.keys(sidSet);
+    if (allSids.length === 0) { Util.showToast('请先勾选要删除的学生或班级'); return; }
+
+    Util.showPrompt('删除确认', '请输入管理员密码（将删除 ' + allSids.length + ' 名学生的成绩）：', '确认删除').then(function(pwd) {
+      if (pwd === null || pwd === undefined || pwd === '') { Util.showToast('已取消', 'error'); return; }
+      if (pwd !== state.examConfig.adminPassword) { Util.showToast('密码错误，未删除', 'error'); return; }
+      var delIds = recs.filter(function(r) { return sidSet[r.studentId]; }).map(function(r) { return r.id; });
+      state.cloudRecords = recs.filter(function(r) { return !sidSet[r.studentId]; });
+      var localList = Storage.get('exam_records', []).filter(function(r) { return !sidSet[r.studentId]; });
+      Storage.set('exam_records', localList);
+      var localScores = Storage.get('scores', []).filter(function(s) { return !sidSet[s.studentId]; });
+      Storage.set('scores', localScores);
+      state.selectedScoreStudents = {};
+      if (Cloud.isConfigured() && delIds.length > 0) {
+        Cloud.deleteRecords(delIds).then(function() {
+          Util.showToast('已删除 ' + allSids.length + ' 名学生的成绩', 'success');
+          renderScorePage(state.cloudRecords || []);
+        }).catch(function() {
+          Util.showToast('本地已删，云端删除失败', 'error');
+          renderScorePage(state.cloudRecords || []);
+        });
+      } else {
+        Util.showToast('已删除 ' + allSids.length + ' 名学生的成绩', 'success');
+        renderScorePage(state.cloudRecords || []);
+      }
+    });
   }
 
   function deleteSelectedStudents() {

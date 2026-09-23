@@ -105,6 +105,29 @@ window.Util = (function() {
     });
   }
 
+  function showPrompt(title, placeholder, confirmText) {
+    return new Promise(function(resolve) {
+      var mask = document.createElement('div');
+      mask.className = 'modal-mask';
+      mask.innerHTML =
+        '<div class="modal-box">' +
+          '<div class="modal-title">' + title + '</div>' +
+          '<input class="form-input" id="prompt-input" type="password" placeholder="' + (placeholder || '') + '" style="margin:12px 0;">' +
+          '<div class="modal-buttons">' +
+            '<button class="modal-btn modal-cancel">取消</button>' +
+            '<button class="modal-btn modal-confirm">' + (confirmText || '确定') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(mask);
+      var input = mask.querySelector('#prompt-input');
+      if (input) input.focus();
+      mask.querySelector('.modal-cancel').onclick = function() { mask.remove(); resolve(null); };
+      mask.querySelector('.modal-confirm').onclick = function() { mask.remove(); resolve(input ? input.value : null); };
+      mask.onclick = function(e) { if (e.target === mask) { mask.remove(); resolve(null); } };
+      mask.querySelector('.modal-box').onclick = function(e) { e.stopPropagation(); };
+    });
+  }
+
   function validateStudentId(id) {
     return /^[A-Za-z0-9]{4,20}$/.test(id);
   }
@@ -149,6 +172,7 @@ window.Util = (function() {
     formatDuration: formatDuration,
     showToast: showToast,
     showModal: showModal,
+    showPrompt: showPrompt,
     validateStudentId: validateStudentId,
     validateName: validateName,
     generateId: generateId,
