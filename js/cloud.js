@@ -108,6 +108,12 @@ window.Cloud = (function() {
     return request('GET', '/exam_records?select=*&student_id=eq.' + encodeURIComponent(studentId) + '&order=submit_time.desc');
   }
 
+  function deleteRecords(ids) {
+    if (!ids || ids.length === 0) return Promise.resolve([]);
+    var filter = ids.map(function(id) { return 'id=eq.' + id; }).join(',');
+    return request('DELETE', '/exam_records?' + filter);
+  }
+
   // ========== 学生名单 ==========
   function uploadStudentList(students) {
     function build(includeClazz) {
@@ -173,6 +179,7 @@ window.Cloud = (function() {
     uploadRecord: uploadRecord,
     fetchAllRecords: fetchAllRecords,
     fetchRecordsByStudent: fetchRecordsByStudent,
+    deleteRecords: deleteRecords,
     uploadStudentList: uploadStudentList,
     fetchStudentList: fetchStudentList,
     clearStudentList: clearStudentList,

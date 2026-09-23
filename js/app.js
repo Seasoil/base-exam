@@ -27,6 +27,7 @@
     adminStudentSearch: '',
     selectedClasses: {},
     selectedStudents: {},
+    selectedScoreStudents: {},
     titleClickCount: 0,
     // 防作弊相关
     deviceInfo: null,
@@ -246,6 +247,7 @@
       case 'import-students': importStudents(); break;
       case 'clear-student-list': clearStudentList(); break;
       case 'delete-selected-students': deleteSelectedStudents(); break;
+      case 'delete-selected-scores': deleteSelectedScores(); break;
       case 'download-template': downloadTemplate(); break;
       case 'show-qrcode': showQRCode(); break;
       case 'add-student': addStudent(); break;
@@ -1577,6 +1579,9 @@
       state.adminScoreView = el.dataset.view;
       renderScorePage(state.cloudRecords || []);
     },
+    toggleScoreCheck: function(el) {
+      state.selectedScoreStudents[el.dataset.scoreCheck] = el.checked;
+    },
     toggleClassCheck: function(el) {
       state.selectedClasses[el.dataset.classCheck] = el.checked;
       var recs = state.cloudRecords || [];
@@ -1723,6 +1728,7 @@
       (view === 'class' ? '<div class="scores-toolbar" style="display:flex;align-items:center;gap:12px;">' +
         '<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="check-all-classes" onchange="window.App.toggleAllClasses(this)" ' + (allChecked ? 'checked' : '') + '> 全选班级</label>' +
         '<button class="btn btn-primary btn-sm" data-action="export-selected-classes">📥 导出勾选班级</button>' +
+        '<button class="btn btn-danger btn-sm" data-action="delete-selected-scores">🗑 删除勾选数据</button>' +
       '</div>' : '') +
       '<div id="score-view-body"></div>';
     if (view === 'class') renderByClass(records);
@@ -1798,6 +1804,7 @@
             var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
             html +=
               '<div class="score-row" data-action="view-student-detail" data-studentid="' + esc(r.studentId) + '">' +
+                '<input type="checkbox" data-score-check="' + esc(r.studentId) + '" ' + (state.selectedScoreStudents[r.studentId] ? 'checked' : '') + ' onchange="window.App.toggleScoreCheck(this)" onclick="event.stopPropagation()" style="width:16px;height:16px;cursor:pointer;margin-right:10px;flex-shrink:0;">' +
                 '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
                 '<div class="score-student"><div class="ss-name">' + esc(r.name) + '</div><div class="ss-id">' + esc(r.studentId) + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
                 '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
@@ -1824,6 +1831,7 @@
             var scoreClass = r.score >= 90 ? 'text-success' : r.score >= 60 ? 'text-warning' : 'text-danger';
             html +=
               '<div class="score-row" data-action="view-student-detail" data-studentid="' + r.studentId + '">' +
+                '<input type="checkbox" data-score-check="' + esc(r.studentId) + '" ' + (state.selectedScoreStudents[r.studentId] ? 'checked' : '') + ' onchange="window.App.toggleScoreCheck(this)" onclick="event.stopPropagation()" style="width:16px;height:16px;cursor:pointer;margin-right:10px;flex-shrink:0;">' +
                 '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
                 '<div class="score-student"><div class="ss-name">' + r.name + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
                 '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
@@ -1875,6 +1883,7 @@
         var inList = !hasList || inListIds[r.studentId];
         html +=
           '<div class="score-row" data-action="view-student-detail" data-studentid="' + esc(r.studentId) + '" style="margin:0;border-radius:0;box-shadow:none;border-top:1px solid #f1f5f9;">' +
+            '<input type="checkbox" data-score-check="' + esc(r.studentId) + '" ' + (state.selectedScoreStudents[r.studentId] ? 'checked' : '') + ' onchange="window.App.toggleScoreCheck(this)" onclick="event.stopPropagation()" style="width:16px;height:16px;cursor:pointer;margin-right:10px;flex-shrink:0;">' +
             '<div class="score-rank rank-normal">' + (idx+1) + '</div>' +
             '<div class="score-student"><div class="ss-name">' + esc(r.name) + (inList ? '' : ' <span style="color:#d97706;font-size:11px;">名单外</span>') + '</div><div class="ss-id">' + r.studentId + (r.isFinal ? '' : ' · <span style="color:#f59e0b;">未交卷</span>') + '</div></div>' +
             '<div class="score-info-text"><div class="si-score ' + scoreClass + '">' + r.score + '<span class="si-unit">分</span></div></div>' +
@@ -2370,6 +2379,47 @@
     Storage.set('student_list', state.studentList);
     Util.showToast('添加成功', 'success');
     renderAdminStudents();
+  }
+
+  // 删除勾选的成绩数据（每次都要输入管理员密码）
+  function deleteSelectedScores() {
+    var sids = Object.keys(state.selectedScoreStudents).filter(function(k) { return state.selectedScoreStudents[k]; });
+    if (sids.length === 0) { Util.showToast('请先勾选要删除的学生成绩'); return; }
+
+    var pwd = prompt('请输入管理员密码以确认删除（' + sids.length + ' 名学生）：');
+    if (pwd === null) return;
+    if (pwd !== state.examConfig.adminPassword) {
+      Util.showToast('密码错误，未删除', 'error');
+      return;
+    }
+
+    var sidSet = {};
+    sids.forEach(function(s) { sidSet[s] = true; });
+    var recs = state.cloudRecords || [];
+    var delIds = recs.filter(function(r) { return sidSet[r.studentId]; }).map(function(r) { return r.id; });
+
+    // 先更新本地界面（立即移除）
+    state.cloudRecords = recs.filter(function(r) { return !sidSet[r.studentId]; });
+    // 同步删除本地缓存
+    var localList = Storage.get('exam_records', []).filter(function(r) { return !sidSet[r.studentId]; });
+    Storage.set('exam_records', localList);
+    var localScores = Storage.get('scores', []).filter(function(s) { return !sidSet[s.studentId]; });
+    Storage.set('scores', localScores);
+    state.selectedScoreStudents = {};
+
+    // 尝试删云端（若匿名key无DELETE权限会失败，提示）
+    if (Cloud.isConfigured() && delIds.length > 0) {
+      Cloud.deleteRecords(delIds).then(function() {
+        Util.showToast('已删除 ' + sids.length + ' 名学生的成绩', 'success');
+        renderScorePage(state.cloudRecords || []);
+      }).catch(function() {
+        Util.showToast('本地已删，云端删除需在Supabase授权后生效', 'error');
+        renderScorePage(state.cloudRecords || []);
+      });
+    } else {
+      Util.showToast('已删除 ' + sids.length + ' 名学生的成绩', 'success');
+      renderScorePage(state.cloudRecords || []);
+    }
   }
 
   function deleteSelectedStudents() {
