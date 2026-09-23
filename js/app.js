@@ -1016,7 +1016,7 @@
     var paper = state.currentPaper;
     var questions = paper.questions;
     var answers = state.answers;
-    var duration = Math.floor((Date.now() - (state.endTime - state.examConfig.duration * 60 * 1000)) / 1000);
+    var duration = Math.floor((Date.now() - state.startTime) / 1000);
     var blurCount = AntiCheat.getBlurCount();
 
     // 判分
