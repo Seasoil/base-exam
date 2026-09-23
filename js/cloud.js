@@ -156,15 +156,6 @@ window.Cloud = (function() {
     return request('DELETE', '/students?id=gt.0');
   }
 
-  // ========== 设备绑定 ==========
-  function checkDeviceBinding(fingerprint) {
-    return request('GET', '/device_bindings?select=*&fingerprint=eq.' + encodeURIComponent(fingerprint));
-  }
-
-  function uploadDeviceBinding(binding) {
-    return request('POST', '/device_bindings', [binding]);
-  }
-
   // ========== 工具 ==========
   function testConnection() {
     return request('GET', '/exam_records?select=id&limit=1');
@@ -183,8 +174,6 @@ window.Cloud = (function() {
     uploadStudentList: uploadStudentList,
     fetchStudentList: fetchStudentList,
     clearStudentList: clearStudentList,
-    checkDeviceBinding: checkDeviceBinding,
-    uploadDeviceBinding: uploadDeviceBinding,
     testConnection: testConnection
   };
 })();

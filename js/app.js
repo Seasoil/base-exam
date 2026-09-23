@@ -559,32 +559,10 @@
       }
     }
 
-    // 设备指纹防替考检查
-    var deviceBindings = Storage.get('device_bindings', {});
-    var fp = state.deviceInfo.fingerprint;
-    var boundStudent = deviceBindings[fp];
-    if (boundStudent && boundStudent.studentId !== state.userInfo.studentId) {
-      Util.showModal('设备异常',
-        '此设备已绑定学号：' + boundStudent.studentId + '（' + boundStudent.name + '）\n\n' +
-        '为防止替考，一台设备只能绑定一名考生。\n如需更换设备，请联系老师。',
-        '我知道了');
-      return;
-    }
-
     // 保存用户信息（本地 + 云端同步）
     Storage.set('userInfo', state.userInfo);
     if (Cloud.isConfigured()) {
       Cloud.uploadStudentList([state.userInfo]).catch(function() {});
-    }
-
-    // 绑定设备与学号（首次）
-    if (!boundStudent) {
-      deviceBindings[fp] = {
-        studentId: state.userInfo.studentId,
-        name: state.userInfo.name,
-        bindTime: Date.now()
-      };
-      Storage.set('device_bindings', deviceBindings);
     }
 
     // 检查考试状态（与学生首页统一）
@@ -1385,7 +1363,7 @@
 
       '<div class="admin-menu">' +
         '<div class="menu-item" data-action="go-admin-config"><div class="menu-icon config-icon">⚙️</div><div class="menu-content"><div class="menu-title">考试配置</div><div class="menu-desc">设置考试时间、题量、题型、难度</div></div><div class="menu-arrow">›</div></div>' +
-        '<div class="menu-item" data-action="go-admin-students"><div class="menu-icon students-icon">👥</div><div class="menu-content"><div class="menu-title">学生名单</div><div class="menu-desc">导入学生名单、学号校验、防替考绑定</div></div><div class="menu-arrow">›</div></div>' +
+        '<div class="menu-item" data-action="go-admin-students"><div class="menu-icon students-icon">👥</div><div class="menu-content"><div class="menu-title">学生名单</div><div class="menu-desc">导入学生名单、学号校验</div></div><div class="menu-arrow">›</div></div>' +
         '<div class="menu-item" data-action="go-admin-monitor"><div class="menu-icon monitor-icon">📡</div><div class="menu-content"><div class="menu-title">考试监控</div><div class="menu-desc">实时查看切屏次数、设备信息、作弊预警</div></div><div class="menu-arrow">›</div></div>' +
         '<div class="menu-item" data-action="go-admin-scores"><div class="menu-icon scores-icon">📊</div><div class="menu-content"><div class="menu-title">成绩管理</div><div class="menu-desc">查看学生成绩、排名、导出Excel</div></div><div class="menu-arrow">›</div></div>' +
         '<div class="menu-item" data-action="go-admin-data"><div class="menu-icon data-icon">🗑️</div><div class="menu-content"><div class="menu-title">数据管理</div><div class="menu-desc">清空考试数据、重置系统、备份</div></div><div class="menu-arrow">›</div></div>' +
@@ -2270,7 +2248,7 @@
         '<div class="warning-title">💡 使用说明</div>' +
         '<div class="warning-item">1. 名单为空时，不校验学生身份，任何人都可以考试。</div>' +
         '<div class="warning-item">2. 导入名单后，学生输入学号会自动匹配姓名，不在名单中无法考试。</div>' +
-        '<div class="warning-item">3. 防替考功能自动启用：一台设备绑定一名考生，换设备需联系老师。</div>' +
+        '<div class="warning-item">3. 一台设备可给多名学生使用，不做限制。</div>' +
       '</div>';
   }
 
@@ -2570,7 +2548,7 @@
       '<div id="monitor-body"><div class="empty">加载中...</div></div>' +
       '<div class="warning-card"><div class="warning-title">⚠️ 监控说明</div>' +
       '<div class="warning-item">1. 切屏会被自动记录，次数多的请重点关注。</div>' +
-      '<div class="warning-item">2. 同一台手机绑定一名考生，换设备会被拦截。</div>' +
+      '<div class="warning-item">2. 学生可在任意设备参加考试。</div>' +
       '<div class="warning-item">3. 切屏超3次重点关注，超5次成绩可作废。</div></div>';
     loadMonitorData();
   }
