@@ -24,7 +24,9 @@
     isAdmin: false,
     adminSortBy: 'maxScore',
     adminSearchKeyword: '',
+    adminStudentSearch: '',
     selectedClasses: {},
+    selectedStudents: {},
     titleClickCount: 0,
     // 防作弊相关
     deviceInfo: null,
@@ -243,6 +245,7 @@
       case 'go-admin-monitor': renderPage('admin-monitor'); break;
       case 'import-students': importStudents(); break;
       case 'clear-student-list': clearStudentList(); break;
+      case 'delete-selected-students': deleteSelectedStudents(); break;
       case 'download-template': downloadTemplate(); break;
       case 'show-qrcode': showQRCode(); break;
       case 'add-student': addStudent(); break;
@@ -312,12 +315,13 @@
       case 'config-total-questions':
         state.examConfig.totalQuestions = Math.min(200, Math.max(1, parseInt(value) || 10));
         break;
-      case 'config-duration':
-        state.examConfig.duration = Math.min(600, Math.max(1, parseInt(value) || 30));
-        if (state.examConfig.startTime) {
-          state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
-          renderAdminConfig();
-        }
+      case 'config-duration-value':
+        state._durValue = parseInt(value) || 1;
+        App_updateDuration();
+        break;
+      case 'config-duration-unit':
+        state._durUnit = value;
+        App_updateDuration();
         break;
       case 'config-basic-max':
         state.examConfig.basicMax = Math.min(15, Math.max(0, parseInt(value) || 15));
@@ -330,6 +334,10 @@
       case 'admin-search':
         state.adminSearchKeyword = value;
         renderAdminScores();
+        break;
+      case 'admin-student-search':
+        state.adminStudentSearch = value;
+        renderAdminStudents();
         break;
     }
   }
@@ -420,7 +428,7 @@
         '<div class="exam-subtitle">二进制 · 八进制 · 十进制 · 十六进制 相互转换</div>' +
         '<div class="exam-tags">' +
           '<span class="tag tag-blue">' + config.totalQuestions + ' 题</span>' +
-          '<span class="tag tag-orange">' + config.duration + ' 分钟</span>' +
+          '<span class="tag tag-orange">' + (function(d){ if (d >= 1440) return (d / 1440) + ' 天'; if (d >= 60) return (d / 60) + ' 小时'; return d + ' 分钟'; })(config.duration) + '</span>' +
           (config.allowRetake ? '<span class="tag tag-green">可多次答题</span>' : '') +
         '</div>' +
       '</div>' +
@@ -1294,13 +1302,45 @@
 
     // 管理首页
     var config = state.examConfig;
-    var scores = Storage.get('scores', []);
-    var stats = {
-      totalStudents: scores.length,
-      totalExams: scores.reduce(function(s, i) { return s + i.examCount; }, 0),
-      avgScore: scores.length > 0 ? Math.round(scores.reduce(function(s, i) { return s + i.maxScore; }, 0) / scores.length * 10) / 10 : 0,
-      maxScore: scores.length > 0 ? Math.max.apply(null, scores.map(function(s) { return s.maxScore; })) : 0
-    };
+    // 云端记录没加载过的话，先拉取（拉完重渲染一次）
+    if (Cloud.isConfigured() && !state._cloudLoaded) {
+      state._cloudLoaded = true;
+      Cloud.fetchAllRecords(1000).then(function(res) {
+        state.cloudRecords = (res || []).map(function(r) {
+          return {
+            id: r.id, studentId: r.student_id, name: r.name, clazz: r.clazz || '未分班',
+            score: r.score, correctCount: r.correct_count, totalCount: r.total_count,
+            duration: r.duration, submitTime: r.submit_time, isTimeout: r.is_timeout,
+            blurCount: r.blur_count, deviceModel: r.device_model, isFinal: r.is_final !== false, startTime: r.start_time
+          };
+        });
+        renderAdmin();
+      }).catch(function() {
+        state._cloudLoaded = false;
+        renderAdmin();
+      });
+      return;
+    }
+    // 统计优先用云端成绩，本地 scores 兜底
+    var cloudRecs = state.cloudRecords || [];
+    if (cloudRecs.length > 0) {
+      var bestMap = pickBest(cloudRecs);
+      var bestList = Object.values(bestMap);
+      var stats = {
+        totalStudents: bestList.length,
+        totalExams: cloudRecs.length,
+        avgScore: bestList.length > 0 ? Math.round(bestList.reduce(function(s, r) { return s + r.score; }, 0) / bestList.length * 10) / 10 : 0,
+        maxScore: bestList.length > 0 ? Math.max.apply(null, bestList.map(function(r) { return r.score; })) : 0
+      };
+    } else {
+      var scores = Storage.get('scores', []);
+      var stats = {
+        totalStudents: scores.length,
+        totalExams: scores.reduce(function(s, i) { return s + i.examCount; }, 0),
+        avgScore: scores.length > 0 ? Math.round(scores.reduce(function(s, i) { return s + i.maxScore; }, 0) / scores.length * 10) / 10 : 0,
+        maxScore: scores.length > 0 ? Math.max.apply(null, scores.map(function(s) { return s.maxScore; })) : 0
+      };
+    }
 
     var _s = computeExamStatus(config);
     var statusText = _s === 1 ? '进行中' : (_s === 0 ? '未开始' : '已结束');
@@ -1366,8 +1406,13 @@
     Util.showModal(actionText + '考试', '确定要' + actionText + '考试吗？' + (newStatus === 2 ? '关闭后学生将无法进入考试。' : ''), '确认' + actionText).then(function(confirmed) {
       if (!confirmed) return;
       state.examConfig.status = newStatus;
-      state.examConfig.startTime = null;
-      state.examConfig.endTime = null;
+      // 开启考试且没设开始时间：以当前时间为统一开始，自动推算截止时间（学生端可看到开始/截止）
+      if (newStatus === 1 && !state.examConfig.startTime) {
+        state.examConfig.startTime = Date.now();
+        state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
+      } else if (newStatus === 1 && state.examConfig.startTime && !state.examConfig.endTime) {
+        state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
+      }
       state.examConfig.updatedAt = Date.now();
       Storage.set('exam_config', state.examConfig);
     // 上传到云端
@@ -1382,6 +1427,13 @@
   // ========== 考试配置页 ==========
   function renderAdminConfig() {
     var config = state.examConfig;
+    var durMin = config.duration || 30;
+    var durValue, durUnit;
+    if (durMin % 1440 === 0) { durValue = durMin / 1440; durUnit = 'd'; }
+    else if (durMin % 60 === 0) { durValue = durMin / 60; durUnit = 'h'; }
+    else { durValue = durMin; durUnit = 'm'; }
+    state._durValue = durValue;
+    state._durUnit = durUnit;
     var questionTypes = Converter.QUESTION_TYPES.map(function(t) {
       var weight = config.typeWeights && config.typeWeights[t.id] != null ? config.typeWeights[t.id] : (1 / Converter.QUESTION_TYPES.length);
       var locked = config.typeWeightsLocked && config.typeWeightsLocked[t.id] ? true : false;
@@ -1434,7 +1486,15 @@
         '<div class="form-group"><label class="form-label">考试名称</label><input class="form-input" type="text" data-input="config-exam-name" value="' + config.examName + '"></div>' +
         '<div class="form-row">' +
           '<div class="form-group flex-1"><label class="form-label">题目数量</label><input class="form-input" type="number" data-input="config-total-questions" value="' + config.totalQuestions + '"></div>' +
-          '<div class="form-group flex-1"><label class="form-label">考试时长(分钟)</label><input class="form-input" type="number" data-input="config-duration" value="' + config.duration + '"></div>' +
+          '<div class="form-group flex-1"><label class="form-label">考试时长</label><div style="display:flex;gap:8px;">' +
+          '<input class="form-input" type="number" data-input="config-duration-value" value="' + durValue + '" min="1" style="flex:1;">' +
+          '<select class="form-input" data-input="config-duration-unit" style="width:80px;">' +
+            '<option value="d" ' + (durUnit === 'd' ? 'selected' : '') + '>天</option>' +
+            '<option value="h" ' + (durUnit === 'h' ? 'selected' : '') + '>小时</option>' +
+            '<option value="m" ' + (durUnit === 'm' ? 'selected' : '') + '>分钟</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="card-desc" style="margin-top:4px;">可选天/小时/分钟，最长30天</div></div>' +
         '</div>' +
         '<div class="form-group switch-item"><label class="form-label">允许多次考试（刷分）</label><label class="switch"><input type="checkbox" ' + (config.allowRetake ? 'checked' : '') + ' onchange="window.App.toggleAllowRetake(this)"><span class="slider"></span></label></div>' +
       '</div>' +
@@ -1465,6 +1525,18 @@
         '<button class="btn btn-secondary mt-16" data-action="reset-config">恢复默认配置</button>' +
         '<button class="btn btn-secondary mt-16" data-action="go-admin">返回管理首页</button>' +
       '</div>';
+  }
+
+  // 时长换算：数值 + 单位 -> 分钟，并联动结束时间
+  function App_updateDuration() {
+    var v = state._durValue || 1;
+    var u = state._durUnit || 'm';
+    var minutes = u === 'd' ? v * 1440 : (u === 'h' ? v * 60 : v);
+    state.examConfig.duration = Math.min(43200, Math.max(1, minutes));
+    if (state.examConfig.startTime) {
+      state.examConfig.endTime = state.examConfig.startTime + state.examConfig.duration * 60000;
+      renderAdminConfig();
+    }
   }
 
   // 暴露给内联事件的方法
@@ -1513,6 +1585,9 @@
       var anyUnchecked = Object.keys(classes).some(function(c) { return state.selectedClasses[c] === false; });
       var all = document.getElementById('check-all-classes');
       if (all) all.checked = !anyUnchecked;
+    },
+    toggleStudentCheck: function(el) {
+      state.selectedStudents[el.dataset.studentCheck] = el.checked;
     },
     toggleAllClasses: function(el) {
       var recs = state.cloudRecords || [];
@@ -1620,6 +1695,16 @@
     }
   }
 
+  // 每个学生取最高分那条记录（若无记录返回空对象）
+  function pickBest(recs) {
+    var best = {};
+    recs.forEach(function(r) {
+      var sid = r.studentId;
+      if (!best[sid] || (r.score != null && r.score > best[sid].score)) best[sid] = r;
+    });
+    return best;
+  }
+
   function renderScorePage(records) {
     if (typeof state.adminScoreView !== 'string') state.adminScoreView = 'session';
     var view = state.adminScoreView;
@@ -1696,13 +1781,8 @@
 
         Object.keys(classGroups).sort().forEach(function(className) {
           var classRecs = classGroups[className];
-          // 每个学生取最终成绩（没有最终的取最新的）
-          var studentMap = {};
-          classRecs.forEach(function(r) {
-            var sid = r.studentId;
-            if (!studentMap[sid] || r.isFinal) studentMap[sid] = r;
-          });
-          var students = Object.values(studentMap);
+          // 每个学生取最高分记录
+          var students = Object.values(pickBest(classRecs));
           students.sort(function(a,b){return b.score - a.score;});
           var classMax = students.length > 0 ? Math.max.apply(null, students.map(function(r){return r.score;})) : 0;
           var classAvg = students.length > 0 ? Math.round(students.reduce(function(s,r){return s+r.score;},0) / students.length * 10) / 10 : 0;
@@ -1730,12 +1810,7 @@
 
         // 名单外学生单独一块
         if (unlistedRecs.length > 0) {
-          var umap = {};
-          unlistedRecs.forEach(function(r) {
-            var sid = r.studentId;
-            if (!umap[sid] || r.isFinal) umap[sid] = r;
-          });
-          var us = Object.values(umap);
+          var us = Object.values(pickBest(unlistedRecs));
           us.sort(function(a,b){return b.score - a.score;});
           var umax = Math.max.apply(null, us.map(function(r){return r.score;}));
           var uavg = Math.round(us.reduce(function(s,r){return s+r.score;},0) / us.length * 10) / 10;
@@ -1782,12 +1857,7 @@
     var html = '';
     classKeys.forEach(function(className) {
       var recs = classGroups[className];
-      var studentMap = {};
-      recs.forEach(function(r) {
-        var sid = r.studentId;
-        if (!studentMap[sid] || r.isFinal) studentMap[sid] = r;
-      });
-      var students = Object.values(studentMap);
+      var students = Object.values(pickBest(recs));
       students.sort(function(a,b){return b.score - a.score;});
       var classMax = students.length ? Math.max.apply(null, students.map(function(r){return r.score;})) : 0;
       var classAvg = students.length ? Math.round(students.reduce(function(s,r){return s+r.score;},0) / students.length * 10) / 10 : 0;
@@ -1895,12 +1965,11 @@
       .replace(/'/g, '&apos;');
   }
 
-  // 导出勾选班级成绩为Excel（每班一个工作表）
+  // 导出勾选班级成绩为Excel（HTML table 格式，UTF-8 不乱码，每班一个分块）
   function exportSelectedClasses() {
     var records = state.cloudRecords || [];
     if (!records.length) { Util.showToast('暂无成绩可导出'); return; }
 
-    // 收集班名 + 每班学生（取最终/max）
     var classRecs = {};
     records.forEach(function(r) {
       var c = r.clazz || '未分班';
@@ -1911,36 +1980,25 @@
     var selected = classNames.filter(function(c) { return state.selectedClasses[c] !== false; });
     if (selected.length === 0) { Util.showToast('请先勾选班级'); return; }
 
-    // 构建 SpreadsheetML XML 多 sheet
-    var xml = '<?xml version="1.0"?>' +
-      '<?mso-application progid="Excel.Sheet"?>' +
-      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
+    var headers = ['排名','学号','姓名','班级','成绩','正确数','总题数','是否交卷','切屏次数','提交时间'];
+    var html = '<html><head><meta charset="UTF-8"></head><body><style>table{border-collapse:collapse;}td,th{border:1px solid #999;padding:4px 8px;font-size:12px;}' +
+    'h3{margin:18px 0 6px;font-size:15px;}</style>';
 
     selected.forEach(function(className) {
-      var recs = classRecs[className];
-      var studentMap = {};
-      recs.forEach(function(r) {
-        var sid = r.studentId;
-        if (!studentMap[sid] || r.isFinal) studentMap[sid] = r;
-      });
-      var students = Object.values(studentMap);
+      var students = Object.values(pickBest(classRecs[className]));
       students.sort(function(a,b){return b.score - a.score;});
-
-      xml += '<Worksheet ss:Name="' + xmlEsc(String(className).replace(/[\/:*?[\]]/g, '_')) + '"><Table>';
-      var headers = ['排名','学号','姓名','班级','成绩','正确数','总题数','是否交卷','切屏次数','提交时间'];
-      xml += '<Row>' + headers.map(function(h){ return '<Cell><Data ss:Type="String">' + xmlEsc(h) + '</Data></Cell>'; }).join('') + '</Row>';
+      html += '<h3>班级：' + esc(className) + '（' + students.length + '人）</h3>';
+      html += '<table><tr>' + headers.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
       students.forEach(function(s, i) {
-        var cells = [i+1, s.studentId, s.name, s.clazz || className, s.score, s.correctCount != null ? s.correctCount : '', s.totalCount != null ? s.totalCount : '', s.isFinal ? '已交卷' : '未交卷', s.blurCount || 0, s.submitTime ? Util.formatTime(s.submitTime) : ''];
-        xml += '<Row>' + cells.map(function(c) {
-          var isNum = typeof c === 'number';
-          return '<Cell><Data ss:Type="' + (isNum ? 'Number' : 'String') + '">' + xmlEsc(c) + '</Data></Cell>';
-        }).join('') + '</Row>';
+        var cells = ['', esc(s.studentId), esc(s.name), esc(s.clazz || className), s.score != null ? s.score : '', s.correctCount != null ? s.correctCount : '', s.totalCount != null ? s.totalCount : '', s.isFinal ? '已交卷' : '未交卷', s.blurCount || 0, s.submitTime ? Util.formatTime(s.submitTime) : ''];
+        cells[0] = i + 1;
+        html += '<tr>' + cells.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>';
       });
-      xml += '</Table></Worksheet>';
+      html += '</table>';
     });
-    xml += '</Workbook>';
+    html += '</body></html>';
 
-    var blob = new Blob(['﻿' + xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    var blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -2106,6 +2164,13 @@
   // ========== 学生名单管理 ==========
   function renderAdminStudents() {
     var list = state.studentList;
+    var kw = (state.adminStudentSearch || '').trim();
+    if (kw) {
+      var kl = kw.toLowerCase();
+      list = list.filter(function(s) {
+        return String(s.studentId).toLowerCase().indexOf(kl) >= 0 || String(s.name).toLowerCase().indexOf(kl) >= 0;
+      });
+    }
     var listHtml = '';
 
     if (list.length === 0) {
@@ -2114,6 +2179,7 @@
       list.forEach(function(s, idx) {
         listHtml +=
           '<div class="student-row">' +
+            '<input type="checkbox" data-student-check="' + esc(s.studentId) + '" ' + (state.selectedStudents[s.studentId] ? 'checked' : '') + ' onchange="window.App.toggleStudentCheck(this)" style="width:16px;height:16px;cursor:pointer;margin-right:10px;">' +
             '<div class="student-idx">' + (idx + 1) + '</div>' +
             '<div class="student-info"><div class="student-sid">' + esc(s.studentId) + '</div><div class="student-sname">' + esc(s.name) + '</div></div>' +
           '</div>';
@@ -2145,11 +2211,15 @@
 
       '<div class="card">' +
         '<div class="card-title-row"><div class="card-title" style="margin:0;">学生名单</div><div class="count-badge">' + list.length + ' 人</div></div>' +
+        '<input class="search-input" type="text" data-input="admin-student-search" placeholder="搜索学号或姓名" value="' + (state.adminStudentSearch || '') + '" style="margin-bottom:12px;">' +
         listHtml +
       '</div>' +
 
       (list.length > 0 ?
-        '<button class="btn btn-danger" data-action="clear-student-list">清空学生名单</button>' : '') +
+        '<div style="display:flex;gap:12px;">' +
+          '<button class="btn btn-danger" data-action="delete-selected-students" style="flex:1;">删除勾选学生</button>' +
+          '<button class="btn btn-outline-danger" data-action="clear-student-list" style="flex:1;">清空全部名单</button>' +
+        '</div>' : '') +
 
       '<div class="warning-card" style="margin-top:16px;">' +
         '<div class="warning-title">💡 使用说明</div>' +
@@ -2210,8 +2280,14 @@
         return;
       }
 
+      // 按学号去重，同学号保留最后出现的一条（一个学号唯一对应一个姓名）
+      var dedup = {};
+      students.forEach(function(s) { dedup[s.studentId] = s; });
+      var dedupCount = students.length - Object.keys(dedup).length;
+      students = Object.keys(dedup).map(function(k) { return dedup[k]; });
+
       Util.showModal('导入确认',
-        '成功解析 ' + students.length + ' 名学生' + (skipped > 0 ? '，跳过 ' + skipped + ' 行无效数据' : '') + '。\n\n导入后将覆盖现有名单，确定吗？',
+        '成功解析 ' + students.length + ' 名学生' + (skipped > 0 ? '，跳过 ' + skipped + ' 行无效数据' : '') + (dedupCount > 0 ? '，其中同学号重复自动合并 ' + dedupCount + ' 条' : '') + '。\n\n导入后将覆盖现有名单，确定吗？',
         '确认导入').then(function(confirmed) {
         if (!confirmed) return;
         state.studentList = students;
@@ -2294,6 +2370,27 @@
     Storage.set('student_list', state.studentList);
     Util.showToast('添加成功', 'success');
     renderAdminStudents();
+  }
+
+  function deleteSelectedStudents() {
+    var selected = Object.keys(state.selectedStudents).filter(function(k) { return state.selectedStudents[k]; });
+    if (selected.length === 0) { Util.showToast('请先勾选要删除的学生'); return; }
+    Util.showModal('删除学生', '确定要删除勾选的 ' + selected.length + ' 名学生吗？', '确认删除').then(function(confirmed) {
+      if (!confirmed) return;
+      var sidSet = {};
+      selected.forEach(function(s) { sidSet[s] = true; });
+      state.studentList = state.studentList.filter(function(s) { return !sidSet[s.studentId]; });
+      state.selectedStudents = {};
+      Storage.set('student_list', state.studentList);
+      // 同步云端：删不了就重传剩余名单（clear+upload）
+      if (Cloud.isConfigured()) {
+        Cloud.clearStudentList().then(function() {
+          return Cloud.uploadStudentList(state.studentList);
+        }).catch(function() {});
+      }
+      Util.showToast('已删除 ' + selected.length + ' 名学生', 'success');
+      renderAdminStudents();
+    });
   }
 
   function clearStudentList() {
