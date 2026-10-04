@@ -101,25 +101,29 @@ window.Cloud = (function() {
 
   function fetchAllRecords(limit) {
     limit = limit || 500;
-    return request('GET', '/exam_records?select=*&order=submit_time.desc&limit=' + limit);
+    return request('GET', '/exam_records?select=*&deleted=eq.false&order=submit_time.desc&limit=' + limit);
   }
 
   function fetchRecordsByStudent(studentId) {
-    return request('GET', '/exam_records?select=*&student_id=eq.' + encodeURIComponent(studentId) + '&order=submit_time.desc');
+    return request('GET', '/exam_records?select=*&student_id=eq.' + encodeURIComponent(studentId) + '&deleted=eq.false&order=submit_time.desc');
   }
 
-  function deleteRecords(ids) {
+  function markRecordsDeleted(ids) {
     if (!ids || ids.length === 0) return Promise.resolve([]);
-    var filter = ids.map(function(id) { return 'id=eq.' + id; }).join(',');
-    return request('DELETE', '/exam_records?' + filter);
+    return request('PATCH', '/exam_records?id=in.(' + ids.join(',') + ')', { deleted: true });
+  }
+
+  function markAllRecordsDeleted() {
+    return request('PATCH', '/exam_records?id=gt.0', { deleted: true });
   }
 
   // ========== 学生名单 ==========
   function uploadStudentList(students) {
-    function build(includeClazz) {
+    function build(includeClazz, includeDeleted) {
       return students.map(function(s) {
         var row = { student_id: s.studentId, name: s.name };
         if (includeClazz && s.clazz !== undefined && s.clazz !== null && s.clazz !== '') row.clazz = s.clazz;
+        if (includeDeleted) row.deleted = false;
         return row;
       });
     }
@@ -140,20 +144,20 @@ window.Cloud = (function() {
         xhr.send(JSON.stringify(rows));
       });
     }
-    return send(build(true)).catch(function(err) {
-      if (err.message.indexOf('clazz') >= 0 || err.message.indexOf('PGRST204') >= 0) {
-        return send(build(false));
+    return send(build(true, true)).catch(function(err) {
+      if (err.message.indexOf('clazz') >= 0 || err.message.indexOf('deleted') >= 0 || err.message.indexOf('PGRST204') >= 0) {
+        return send(build(false, false));
       }
       throw err;
     });
   }
 
   function fetchStudentList() {
-    return request('GET', '/students?select=*&order=student_id');
+    return request('GET', '/students?select=*&deleted=eq.false&order=student_id');
   }
 
   function clearStudentList() {
-    return request('DELETE', '/students?id=gt.0');
+    return request('PATCH', '/students?id=gt.0', { deleted: true });
   }
 
   // ========== 工具 ==========
@@ -170,7 +174,8 @@ window.Cloud = (function() {
     uploadRecord: uploadRecord,
     fetchAllRecords: fetchAllRecords,
     fetchRecordsByStudent: fetchRecordsByStudent,
-    deleteRecords: deleteRecords,
+    markRecordsDeleted: markRecordsDeleted,
+    markAllRecordsDeleted: markAllRecordsDeleted,
     uploadStudentList: uploadStudentList,
     fetchStudentList: fetchStudentList,
     clearStudentList: clearStudentList,

@@ -2133,6 +2133,8 @@
         if (!c2) return;
         Storage.remove('exam_records');
         Storage.remove('scores');
+        state.cloudRecords = [];
+        if (Cloud.isConfigured()) Cloud.markAllRecordsDeleted().catch(function() {});
         // 清除所有进度
         var keys = [];
         for (var i = 0; i < localStorage.length; i++) {
@@ -2422,7 +2424,7 @@
       Storage.set('scores', localScores);
       state.selectedScoreStudents = {};
       if (Cloud.isConfigured() && delIds.length > 0) {
-        Cloud.deleteRecords(delIds).then(function() {
+        Cloud.markRecordsDeleted(delIds).then(function() {
           Util.showToast('已删除 ' + allSids.length + ' 名学生的成绩', 'success');
           renderScorePage(state.cloudRecords || []);
         }).catch(function() {
